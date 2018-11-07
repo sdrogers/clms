@@ -33,42 +33,14 @@ class Peak(object):
             else:
                 return None
         # if we get here, it's ms_level >1 and rt is ok
-        if(parent._isolation_match(isolation_windows)):
-            return (self._get_mz(rt),self._get_intensity())
+        if(self.parent._isolation_match(isolation_windows)):
+            return (self._get_mz(rt),self._get_intensity(rt))
 
     def _get_mz(self,rt):
         return self.mz
 
-    def _get_intensity(self,mz):
+    def _get_intensity(self,rt):
         return self.intensity
-
-    # def get(self,ms_level,rt,isolation_window):
-    #     if self.ms_level != ms_level:
-    #         self.get_parent_intensity = None
-    #         self.get_parent_mz = None
-    #         self.get_intensity = None
-    #         self.get_mz = None
-    #         self.in_range = None
-    #     elif ms_level==1: # ms1 scan of ms1 Peak
-    #         self.get_intensity = self.intensity
-    #         self.get_mz = self.mz
-    #         self.get_parent_intensity = None
-    #         self.get_parent_mz = None
-    #         self.in_range = None
-    #     else: # ms2 scan of ms2 Peak
-    #         self.in_range = 0
-    #         for i in range(0,len(isolation_window[0])):
-    #             if self.parent.mz > isolation_window[0][i] and self.parent.mz <= isolation_window[1][i]:
-    #                 self.in_range=1
-    #                 self.get_parent_intensity = self.parent.intensity
-    #                 self.get_parent_mz = self.parent.mz
-    #                 self.get_intensity = self.intensity
-    #                 self.get_mz = self.mz
-    #         if self.in_range == 0:
-    #             self.get_parent_intensity = None
-    #             self.get_parent_mz = None
-    #             self.get_intensity = None
-    #             self.get_mz = None
 
     def _rt_match(self,rt):
         if not rt:
