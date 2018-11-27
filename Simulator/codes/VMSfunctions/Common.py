@@ -55,7 +55,7 @@ class Peak(object):
         if not isolation_windows:
             return True
         for window in isolation_windows:
-            if(self.mz > window[0] and self.mz < window[1]):
+            if(self.mz > window[0] and self.mz <= window[1]):
                 return True
         return False
         # for i in range(0,len(isolation_window[0])):
