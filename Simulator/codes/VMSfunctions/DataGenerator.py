@@ -155,7 +155,7 @@ class PeakSampler(object):
         
     def sample(self, ms_level, n_peaks=None):
         if n_peaks is None:
-            n_peaks = self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0]
+            n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0],0)
         vals = self.density_estimator.sample(ms_level, n_peaks)
         mzs = vals[:, 0]
         intensities = np.exp(vals[:, 1])

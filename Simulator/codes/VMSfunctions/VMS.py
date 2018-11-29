@@ -4,14 +4,21 @@ from VMSfunctions.Common import load_obj
 from VMSfunctions.DataGenerator import PeakSampler
 
 class Sample_Dataset:
-    def __init__ (self,file_location,n_ms1,n_ms2=None):
+    def __init__ (self,file_location,n_ms1=None,n_ms2=None):
         ps = load_obj(file_location)
         self.peaks = []
+        if n_ms1==None:
+            n_ms1 = len(ps.sample(ms_level=1))
         for i in range(0,n_ms1):
             ms1 = ps.sample(ms_level=1,n_peaks=1)
             ms1[0].rt=0
-            ms2 = ps.sample(ms_level=2,n_peaks=n_ms2)
-            for j in range(0,n_ms2):
+            if n_ms2 == None:
+                ms2 = ps.sample(ms_level=2)
+                if len(ms2)<0:
+                    ms2 = ps.sample(ms_level=2,n_peaks=0)
+            else:
+                ms2 = ps.sample(ms_level=2,n_peaks=n_ms2)
+            for j in range(0,len(ms2)):
                 ms2[j].parent = ms1[0]
                 ms2[j].rt = 0
             self.peaks.extend(ms1)
@@ -21,17 +28,18 @@ class Sample_Dataset:
         self.ms1_range = [math.inf,-math.inf]
         for dataset_index in range(0,len(self.peaks)):
             if self.peaks[dataset_index].ms_level == 2:
-                self.ms1_names.append(self.peaks[dataset_index].parent)
                 self.ms2_names.append(self.peaks[dataset_index])
-                self.ms1_range = np.array([min(self.ms1_range[0],self.peaks[dataset_index].parent.mz), max(self.ms1_range[1],self.peaks[dataset_index].parent.mz)]).tolist()
-        self.ms1_range = [(self.ms1_range[0][0],self.ms1_range[1][0])]
-                
+            elif self.peaks[dataset_index].ms_level == 1:
+                self.ms1_names.append(self.peaks[dataset_index])
+                self.ms1_range = np.array([min(self.ms1_range[0],self.peaks[dataset_index].mz), max(self.ms1_range[1],self.peaks[dataset_index].mz)]).tolist()
+            else:
+                sys.exit("MS level beyond MS1 / MS2. This has not been implemented yet")
+        self.ms1_range = [(self.ms1_range[0],self.ms1_range[1])]
     def ms1_values(self):
         ms1_values = []
         for dataset_index in range(0,len(self.peaks)):
             if self.peaks[dataset_index].ms_level == 1:
                 ms1_values.append(self.peaks[dataset_index].mz)
-        ms1_values = sum(np.array(ms1_values).tolist(),[])
         return(ms1_values)
     
 class Dataset_Scan(object):
@@ -173,11 +181,11 @@ class Dia_Kaufmann(object):
             for i in range(0,len(bin_walls)-1):
                 ms2_vec.extend([0])
                 ms1_vec.extend([len(np.where(np.logical_and(np.array(self.ms1_values)>bin_walls[i], np.array(self.ms1_values)<=bin_walls[i+1]))[0])])
-                for j in range(0,len(self.ms1_names)):
+                for j in range(0,len(self.ms2_names)):
                     if [(bin_walls[i],bin_walls[i+1])]==locations_all[j]:
-                        ms2_vec[i] +=1
+                        ms2_vec[i] +=1    
             ms1_vec_nozero = [value for value in ms1_vec if value != 0]
-            ms2_vec_nozero = [value for value in ms2_vec if value != 0]
+            ms2_vec_nozero = [value for value in ms1_vec if value != 0]
             entropy_vec = []
             for j in range(0,len(ms2_vec_nozero)):
                 entropy_vec.append(-ms2_vec_nozero[j] *ms1_vec_nozero[j]*math.log(1/ms1_vec_nozero[j])) 
