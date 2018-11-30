@@ -265,6 +265,10 @@ class Dia_Location_Finder(object):
     def _mid_point_in_location(self,mid_point,sample_index):
         for locations_index in range(0,len(self.locations)):
             if self._in_window(mid_point,self.locations[locations_index])==True and self.scan_results[locations_index][sample_index]==0:   
+                #print(sample_index)
+                #print('hello1')
+                #print(self.scan_results[locations_index][sample_index])
+                #print(self._in_window(mid_point,self.locations[locations_index]))
                 return False
             if self._in_window(mid_point,self.locations[locations_index])==False and self.scan_results[locations_index][sample_index]==1:
                 return False
@@ -273,6 +277,9 @@ class Dia_Location_Finder(object):
             
     def _in_window(self,mid_point,locations):
         for window in locations:
+            #print(mid_point)
+            #print(window[0])
+            #print(window[1])
             if(mid_point > window[0] and mid_point <= window[1]):
                 return True
         return False
