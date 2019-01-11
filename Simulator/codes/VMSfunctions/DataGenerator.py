@@ -6,7 +6,7 @@ import pylab as plt
 import pymzml
 from sklearn.neighbors import KernelDensity
 
-from .Common import Peak, MZ, RT, INTENSITY, N_PEAKS, MZ_INTENSITY
+from .Common import Peak, NoisyPeak, MZ, RT, INTENSITY, N_PEAKS, MZ_INTENSITY
 
 
 class DataSource(object):
@@ -147,13 +147,12 @@ class PeakDensityEstimator(object):
     def n_peaks(self, ms_level, n_sample):
         return self.kdes[(N_PEAKS, ms_level)].sample(n_sample)
 
-
 class PeakSampler(object):
     """A class to sample peaks from a trained density estimator"""
     def __init__(self, density_estimator):
         self.density_estimator = density_estimator
         
-    def sample(self, ms_level, n_peaks=None):
+    def sample(self, ms_level, n_peaks=None,ms2_mz_noise_sd=0,ms2_intensity_noise_sd=0):
         if n_peaks is None:
             n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0],0)
         vals = self.density_estimator.sample(ms_level, n_peaks)
@@ -162,6 +161,6 @@ class PeakSampler(object):
         rts = vals[:, 2]
         peaks = []
         for i in range(n_peaks):
-            p = Peak(mzs[i], rts[i], intensities[i], ms_level)
+            p = NoisyPeak(ms2_mz_noise_sd, ms2_intensity_noise_sd, mzs[i], rts[i], intensities[i], ms_level)
             peaks.append(p)
         return peaks

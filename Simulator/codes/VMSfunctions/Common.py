@@ -1,5 +1,6 @@
 import pickle
 from sklearn.externals import joblib
+import numpy as np
 
 # some useful constants
 MZ = 'mz'
@@ -64,7 +65,6 @@ class Peak(object):
                 return (self._get_mz(rt), self._get_intensity())
             else:
                 return None
-
         # if we get here, it's ms_level >1 and rt is ok
         if (self.parent._isolation_match(isolation_windows)):
             return (self._get_mz(rt), self._get_intensity(rt))
@@ -93,4 +93,28 @@ class Peak(object):
                 return True
         return False
         # for i in range(0,len(isolation_window[0])):
-        #         if self.parent.mz > isolation_window[0][i] and self.parent.mz <= isolation_window[1][i]:
+        #         if self.parent.mz > isolation_window[0][i] and self.parent.mz <= isolation_window[1][i]: 
+
+class NoisyPeak(Peak):
+    def __init__(self, ms2_mz_noise_sd, ms2_intensity_noise_sd, mz, rt, intensity, ms_level, parent=None, filename=None, scan_number=None):
+        super().__init__(mz, rt, intensity, ms_level, parent=None, filename=None, scan_number=None)
+        self.ms2_mz_noise_sd = ms2_mz_noise_sd
+        self.ms2_intensity_noise_sd = ms2_intensity_noise_sd
+    def get(self, ms_level, rt, isolation_windows):
+        if not ms_level == self.ms_level:
+            return None
+        if not self._rt_match(rt):
+            return None
+        if ms_level == 1:
+            if self._isolation_match(isolation_windows):
+                return (self._get_mz(rt), self._get_intensity())
+            else:
+                return None
+        # if we get here, it's ms_level >1 and rt is ok
+        if (self.parent._isolation_match(isolation_windows)):
+            if self.ms_level==2:
+                noisy_mz = self._get_mz(rt) + np.random.normal(0,self.ms2_mz_noise_sd,1)
+                noisy_intensity = self._get_intensity(rt) + np.random.normal(0,self.ms2_intensity_noise_sd,1)
+                return (noisy_mz, noisy_intensity)   
+            else:
+                return(self._get_mz(rt), self._get_intensity(rt))
