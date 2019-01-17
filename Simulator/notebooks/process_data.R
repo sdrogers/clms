@@ -54,7 +54,7 @@ get_feature = function(raw_data, row, msLevel) {
   one_file = filterFile(raw_data, sample)
   filtered_file = filterRt(filterMz(one_file, mz_range), rt_range)
   chrom_data = as(filtered_file, 'data.frame')
-  plotMsData(chrom_data)
+  # plotMsData(chrom_data)
 
   # TODO: normalise the rt values, first value (start) is 0
   # TODO: normalise the mz values, the average is 0
@@ -63,7 +63,7 @@ get_feature = function(raw_data, row, msLevel) {
   rt_values = chrom_data$rt
   intensity_values = chrom_data$i
   
-  return(list(mz=row$mz, mzmin=row$mzmin, mzmax=row$mzmax, 
+  return(list(id=rownames(row), mz=row$mz, mzmin=row$mzmin, mzmax=row$mzmax, 
               rt=row$rt, rtmin=row$rtmin, rtmax=row$rtmax,
               into=row$into, maxo=row$maxo, sn=row$sn, 
               mz_values = mz_values, rt_values = rt_values, intensity_values = intensity_values,
@@ -75,31 +75,44 @@ sortDf <- function(df, decreasing=TRUE) {
   return(speaks)
 }
 
-get_all_features <- function(raw_data_in_memory, filtered_list, msLevel) {
+get_all_features <- function(data, filtered_list, msLevel, N) {
   start.time <- Sys.time()
-  all_features <- lapply(filtered_list[1:N], function(row) {
-    feature <- get_feature(raw_data_in_memory, row, msLevel)
-  })
+  # all_features <- lapply(filtered_list[1:N], function(row) {
+  #   feature <- get_feature(data, row, msLevel)
+  # })
+  all_features <- vector("list", length = N)
+  for (i in 1:N) {
+    print(paste(i, '/', N))
+    row <- filtered_list[[i]]
+    all_features[[i]] <- get_feature(data, row, msLevel)
+  }
   end.time <- Sys.time()
   time.taken <- end.time - start.time
   print(time.taken)
   return(all_features)  
 }
 
-get_all_features_par <- function(raw_data_in_memory, filtered_list, msLevel) {
+get_all_features_par <- function(data, filtered_list, msLevel, N) {
   library(foreach)
   library(doParallel)
   no_cores <- detectCores() - 1
   cl<-makeCluster(no_cores)
   registerDoParallel(cl)
   start.time <- Sys.time()
+
+  # use biocparallel instead?
+  # all_features = bplapply(1:N, function(i, filtered_list, msLevel, get_feature) {
+  #   row <- filtered_list[[i]]
+  #   feature <- get_feature(data, row, msLevel)
+  # }, filtered_list, msLevel, get_feature)
+  
   all_features <- foreach(i=1:N,
                           .combine = list,
-                          .multicombine = TRUE,
+                          .multicombine = FALSE,
                           .export = 'get_feature',
                           .packages = 'xcms') %dopar% {
                             row <- filtered_list[[i]]
-                            feature <- get_feature(raw_data_in_memory, row, msLevel)
+                            feature <- get_feature(data, row, msLevel)
                           }
   end.time <- Sys.time()
   time.taken <- end.time - start.time
@@ -137,6 +150,8 @@ sorted_df <- sortDf(peaks_df, FALSE)
 filtered_list <-  setNames(split(sorted_df, seq(nrow(sorted_df))), rownames(sorted_df)) # convert df to list
 
 N <- length(filtered_list)
-N <- 10
-all_features <- get_all_features(xdata, filtered_list, msLevel)
-# all_features_par <- get_all_features_par(raw_data_in_memory, filtered_list, msLevel)
+# all_features_par <- get_all_features_par(xdata, filtered_list, msLevel, N)
+all_features <- get_all_features(xdata, filtered_list, msLevel, N)
+dfs <- lapply(all_features, data.frame, stringsAsFactors = FALSE) # list of dataframes, one for each peak
+df <- do.call("rbind", dfs) # a single big dataframe
+write.csv(df, file = 'peaks.csv')
