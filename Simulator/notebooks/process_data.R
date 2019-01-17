@@ -154,4 +154,4 @@ N <- length(filtered_list)
 all_features <- get_all_features(xdata, filtered_list, msLevel, N)
 dfs <- lapply(all_features, data.frame, stringsAsFactors = FALSE) # list of dataframes, one for each peak
 df <- do.call("rbind", dfs) # a single big dataframe
-write.csv(df, file = 'peaks.csv')
+write.csv(df, file = 'peaks.csv', row.names = FALSE)
