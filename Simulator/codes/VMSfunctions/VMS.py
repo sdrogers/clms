@@ -63,7 +63,10 @@ class Dia_Windows(object):
             ms1_range = [(math.inf,-math.inf)]
             for dataset_index in range(0,len(dataset.peaks)):
                 if dataset.peaks[dataset_index].ms_level == 1:
-                    ms1_range = [(min(ms1_range[0][0],dataset.peaks[dataset_index].mz), max(ms1_range[0][1],dataset.peaks[dataset_index].mz))]
+                    ms1_range = [
+                        (min(ms1_range[0][0],dataset.peaks[dataset_index].mz),
+                         max(ms1_range[0][1],dataset.peaks[dataset_index].mz))
+                    ]
                     self.ms1_values.append(dataset.peaks[dataset_index].mz)
             ms1_range_difference = ms1_range[0][1] - ms1_range[0][0]
         else:

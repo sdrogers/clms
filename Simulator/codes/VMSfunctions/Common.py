@@ -1,6 +1,7 @@
 import pickle
 from sklearn.externals import joblib
 import numpy as np
+import math
 
 # some useful constants
 MZ = 'mz'
@@ -43,7 +44,12 @@ def load_obj(filename, use_joblib=True):
 
 
 class Peak(object):
-    def __init__(self, mz, rt, intensity, ms_level, parent=None, filename=None, scan_number=None):
+    def __init__(self, mz, rt,
+                 intensity,                         # the maximum intensity value, 'maxo' in xcms
+                 ms_level,                          # the ms-level: 1, 2, ...
+                 parent=None,                       # the parent peak, it's another peak object
+                 filename=None,                     # the name of the originating file
+                 scan_number=None):                 # the scan number where this peak comes from
         self.mz = mz
         self.rt = rt
         self.intensity = intensity
@@ -94,6 +100,54 @@ class Peak(object):
         return False
         # for i in range(0,len(isolation_window[0])):
         #         if self.parent.mz > isolation_window[0][i] and self.parent.mz <= isolation_window[1][i]: 
+
+
+class ChromatographicPeak(Peak):
+    def __init__(self, mz, rt,
+                 intensity,                         # the maximum intensity value, 'maxo' in xcms
+                 ms_level,                          # the ms-level: 1, 2, ...
+                 parent=None,                       # the parent peak, it's another peak object
+                 filename=None,                     # the filename where this peak comes from
+                 scan_number=None,                  # the scan number where this peak comes from
+                 pid=None,                          # the peak identifier, some string or number
+                 sample_idx=None,                   # the index of the originating file in the dataset
+                 sn=None,                           # the signal-to-noise ratio
+                 mz_range=None,                     # the mz range of the signal
+                 rt_range=None,                     # the rt range of the signal
+                 integrated_intensity=None,         # the integrated intensity value, 'into' in xcms
+                 mz_values=np.array([]),            # the mz values of the signal
+                 rt_values=np.array([]),            # the rt values of the signal
+                 intensity_values=np.array([])):    # the intensity values of the signal
+        super(ChromatographicPeak, self).__init__(mz, rt, intensity, ms_level, parent=parent, filename=filename,
+                                                  scan_number=scan_number)
+        self.pid = pid
+        self.sample_idx = sample_idx
+        self.sn = sn
+        self.mz_range = mz_range
+        self.rt_range = rt_range
+        self.integrated_intensity = integrated_intensity
+        self.mz_values = mz_values
+        self.rt_values = rt_values
+        self.intensity_values = intensity_values
+
+    def __repr__(self):
+        return 'ChromatographicPeak mz=%.4f rt=%.2f intensity=%.2f ms_level=%d' % (self.mz, self.rt, self.intensity, self.ms_level)
+
+    def get(self, ms_level, rt, isolation_windows):
+        raise NotImplementedError
+
+    def _get_mz(self, rt):
+        raise NotImplementedError
+
+    def _get_intensity(self, rt):
+        raise NotImplementedError
+
+    def _rt_match(self, rt):
+        raise NotImplementedError
+
+    def _isolation_match(self, isolation_windows):
+        raise NotImplementedError
+
 
 class NoisyPeak(Peak):
     def __init__(self, ms2_mz_noise_sd, ms2_intensity_noise_sd, mz, rt, intensity, ms_level, parent=None, filename=None, scan_number=None):
