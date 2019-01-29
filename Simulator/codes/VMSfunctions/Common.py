@@ -43,6 +43,87 @@ def load_obj(filename, use_joblib=True):
             return pickle.load(f)
 
 
+
+# Formulae C12H6N2
+
+class Formula(object):
+
+    def __init__(self, formula_string):
+        self.formula_string = formula_string
+
+    def get_isotope_distribution(self, proportion):
+        raise NotImplementedError()
+
+
+class Chemical(object):
+
+    def get_mz_peaks(self, rt, ms_level, isolation_windows):
+        raise NotImplementedError()
+
+class UnknownChemical(Chemical):
+
+    def __init__(self, mz, rt, max_intensity, chromatogram):
+        self.mz = mz
+        self.rt = rt
+        self.max_intensity = max_intensity
+        self.chromatogram = chromatogram
+
+    def get_mz_peaks(self, query_rt, ms_level, isolation_windows):
+        intensity = self.max_intensity * self.chromatogram.get_relative_intensity(query_rt - self.rt)
+        mz = self.mz + self.chromatogram.get_mz(query_rt - self.rt)
+        return [(mz, intensity)]
+
+class KnownChemical(Chemical):
+
+    def __init__(self, name, formula):
+        self.name = name
+        self.formula = formula
+
+    def get_mz_peaks(self, rt, ms_level, isolation_windows):
+
+
+class MassSpectrometer:
+    # Make a generator
+
+    def __next__(self):
+        raise NotImplementedError()
+
+class IndependentMassSpectrometer(MassSpectrometer):
+
+class ThermoFusionMassSpectrometer:
+
+    def __next__(self):
+        raise NotImplementedError()
+
+
+class Chromatogram:
+
+    def get_relative_intensity(self, rt):
+        raise NotImplementedError()
+
+    def get_mz(self, rt):
+        raise NotImplementedError()
+
+class Controller:
+
+class DIAController(Controller):
+
+class TopNController(Controller):
+
+class WindowGenerator:
+
+class KaufmannTree:
+
+
+class PeakGenerator:
+
+class RestrictedCRP(PeakGenerator):
+
+
+
+
+
+
 class Peak(object):
     def __init__(self, mz, rt,
                  intensity,                         # the maximum intensity value, 'maxo' in xcms
