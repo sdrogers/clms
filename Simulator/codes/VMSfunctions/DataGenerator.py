@@ -3,6 +3,7 @@ import os
 import math
 from collections import defaultdict
 import copy
+import random
 
 import numpy as np
 import pylab as plt
@@ -11,7 +12,7 @@ import pymzml
 from sklearn.neighbors import KernelDensity
 
 from .Common import Peak, ChromatographicPeak, NoisyPeak, MZ, RT, INTENSITY, N_PEAKS, MZ_INTENSITY
-
+from VMSfunctions.transformation import *
 
 class DataSource(object):
     """
@@ -303,20 +304,70 @@ class PeakDensityEstimator(object):
     def n_peaks(self, ms_level, n_sample):
         return self.kdes[(N_PEAKS, ms_level)].sample(n_sample)
 
-class PeakSampler(object):
-    """A class to sample peaks from a trained density estimator"""
-    def __init__(self, density_estimator):
-        self.density_estimator = density_estimator
+# class PeakSampler(object):
+#     """A class to sample peaks from a trained density estimator"""
+#     def __init__(self, density_estimator):
+#         self.density_estimator = density_estimator
         
-    def sample(self, ms_level, n_peaks=None,ms2_mz_noise_sd=0,ms2_intensity_noise_sd=0):
+#     def sample(self, ms_level, n_peaks=None,ms2_mz_noise_sd=0,ms2_intensity_noise_sd=0):
+#         if n_peaks is None:
+#             n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0],0)
+#         vals = self.density_estimator.sample(ms_level, n_peaks)
+#         mzs = vals[:, 0]
+#         intensities = np.exp(vals[:, 1])
+#         rts = vals[:, 2]
+#         peaks = []
+#         for i in range(n_peaks):
+#             p = NoisyPeak(ms2_mz_noise_sd, ms2_intensity_noise_sd, mzs[i], rts[i], intensities[i], ms_level)
+#             peaks.append(p)
+#         return peaks
+
+class PeakSampler(object):
+    """A class to sample peaks from a trained density estimator, or from a trained density estimator and a list of compounds"""
+    def __init__(self, density_estimator, ms1_mz_source="densities", compound_list=None, transformations_file = None, transformations_prob = None):
+        self.density_estimator = density_estimator
+        self.ms1_mz_source = ms1_mz_source
+        if ms1_mz_source == "compound_list":
+            self.compound_list = compound_list
+            self.transformations = load_from_file(transformations_file)
+            self.transformations_prob = transformations_prob
+
+    def sample(self, ms_level, n_peaks=None, ms2_mz_noise_sd=0, ms2_intensity_noise_sd=0):
         if n_peaks is None:
             n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0],0)
+            if self.ms1_mz_source == "compound_list":
+                n_peaks = min(n_peaks,len(self.compound_list))
         vals = self.density_estimator.sample(ms_level, n_peaks)
-        mzs = vals[:, 0]
         intensities = np.exp(vals[:, 1])
         rts = vals[:, 2]
+        if ms_level == 1 and self.ms1_mz_source == "compound_list":
+            ran = random.sample(range(len(self.compound_list)), n_peaks)
+            mzs = []
+            for i in range(n_peaks):
+                which_transformation = np.random.choice(range(len(self.transformations)),1,self.transformations_prob)
+                mzs.append(self.transformations[which_transformation[0]].reversetransform(self.compound_list[i].monisotopic_molecular_weight))
+        else:
+            mzs = vals[:, 0]
         peaks = []
         for i in range(n_peaks):
             p = NoisyPeak(ms2_mz_noise_sd, ms2_intensity_noise_sd, mzs[i], rts[i], intensities[i], ms_level)
+            peaks.append(p)
+        return peaks
+    
+    def sample_n(self,ms_level,n_peaks=None):
+        if n_peaks is None:
+            n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0],0)
+            if self.ms1_mz_source == "compound_list":
+                n_peaks = min(n_peaks,len(self.compound_list))
+        return(n_peaks)
+    
+    def sample_noise_peak(self,ms_level,intensity,intensity_noise,mz_noise,rt_length=None,n_noise_peaks=None):
+        vals = self.density_estimator.sample(ms_level, n_noise_peak)
+        rts = vals[:, 2]
+        intensities = [intensity for i in range(n_noise_peak)]
+        mzs = vals[:, 0]
+        peaks = []
+        for i in range(n_noise_peak):
+            p = NoisyPeak(mz_noise, intensity_noise, mzs[i], rts[i], intensities[i], ms_level)
             peaks.append(p)
         return peaks

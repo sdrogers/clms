@@ -172,3 +172,12 @@ class NoisyPeak(Peak):
                 return (noisy_mz, noisy_intensity)   
             else:
                 return(self._get_mz(rt), self._get_intensity(rt))
+            
+class Compound(object):
+    def __init__(self, name, chemical_formula, monisotopic_molecular_weight, smiles, inchi, inchikey):
+        self.name = name
+        self.chemical_formula = chemical_formula
+        self.monisotopic_molecular_weight = monisotopic_molecular_weight
+        self.smiles = smiles
+        self.inchi = inchi
+        self.inchikey = inchikey
