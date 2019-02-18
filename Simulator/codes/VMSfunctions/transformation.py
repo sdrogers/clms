@@ -1,7 +1,9 @@
 ELECTRON_MASS = 0.00054857990924
 
+
 class Transformation(object):
-    def __init__(self,name,adduct_mass,charge = 1,multiplicity = 1,isotope_diff = 0,parent = None,vote = 1.0,adducts = "none",charge_name = None,isotope = "mono"):
+    def __init__(self, name, adduct_mass, charge=1, multiplicity=1, isotope_diff=0, parent=None, vote=1.0,
+                 adducts="none", charge_name=None, isotope="mono"):
         self.name = name
         self.adduct_mass = adduct_mass
         self.charge = charge
@@ -14,20 +16,20 @@ class Transformation(object):
         self.isotope = isotope
 
     def transform(self, peak_mass):
-        M = peak_mass*abs(self.charge) + self.charge*ELECTRON_MASS - self.adduct_mass
+        M = peak_mass * abs(self.charge) + self.charge * ELECTRON_MASS - self.adduct_mass
         # M /= (1.0*self.multiplicity)
         # M -= self.isotope_diff
         M -= self.isotope_diff
-        M /= (1.0*self.multiplicity)
+        M /= (1.0 * self.multiplicity)
         return M
 
-    def reversetransform(self,M):
+    def reversetransform(self, M):
         # reverse transform
         p = M
-        p *=(1.0*self.multiplicity)
+        p *= (1.0 * self.multiplicity)
         p += self.isotope_diff
-        p = p + self.adduct_mass - self.charge*ELECTRON_MASS
-        p = p/abs(self.charge)
+        p = p + self.adduct_mass - self.charge * ELECTRON_MASS
+        p = p / abs(self.charge)
         return p
 
     def __str__(self):
@@ -36,28 +38,29 @@ class Transformation(object):
     def __repr__(self):
         return self.__str__()
 
-def load_from_file(file_name,charge_counts = {},adduct_counts = {},isotope_counts = {},multiplicity_counts = {}):
-    import yaml,re
+
+def load_from_file(file_name, charge_counts={}, adduct_counts={}, isotope_counts={}, multiplicity_counts={}):
+    import yaml, re
     transformations = []
-    all_vals = yaml.load(open(file_name,'r'))
+    all_vals = yaml.load(open(file_name, 'r'))
 
     charge_probs = {}
     tot_ch = 0.0
     for c in all_vals['charge_carriers']:
         charge_probs[c] = all_vals['charge_carriers'][c]['v']
-        charge_probs[c] += charge_counts.get(c,0)
+        charge_probs[c] += charge_counts.get(c, 0)
         tot_ch += charge_probs[c]
 
     # print "Charge Probabilities"
     for c in charge_probs:
-        charge_probs[c]/=tot_ch
+        charge_probs[c] /= tot_ch
     # print "{}: {:.3f}".format(c,charge_probs[c])
 
     adduct_probs = {}
     tot_ad = 0.0
     for a in all_vals['adducts']:
         adduct_probs[a] = all_vals['adducts'][a]['v']
-        adduct_probs[a] += adduct_counts.get(a,0)
+        adduct_probs[a] += adduct_counts.get(a, 0)
         tot_ad += adduct_probs[a]
 
     # print
@@ -66,12 +69,11 @@ def load_from_file(file_name,charge_counts = {},adduct_counts = {},isotope_count
         adduct_probs[a] /= tot_ad
     # print "{}: {:.3f}".format(a,adduct_probs[a])
 
-
     iso_probs = {}
     tot_iso = 0.0
     for i in all_vals['isotopes']:
         iso_probs[i] = all_vals['isotopes'][i]['v']
-        iso_probs[i] += isotope_counts.get(i,0)
+        iso_probs[i] += isotope_counts.get(i, 0)
         tot_iso += iso_probs[i]
     # print
     # print "Isotope Probabilities"
@@ -83,15 +85,13 @@ def load_from_file(file_name,charge_counts = {},adduct_counts = {},isotope_count
     tot_mult = 0.0
     for m in all_vals['multiplicities']:
         mult_probs[m] = all_vals['multiplicities'][m]
-        mult_probs[m] += multiplicity_counts.get(m,0)
+        mult_probs[m] += multiplicity_counts.get(m, 0)
         tot_mult += mult_probs[m]
     # print
     # print "Multiplicity Probabilities"
     for m in mult_probs:
         mult_probs[m] /= tot_mult
     # print "{}: {:.3f}".format(m,mult_probs[m])
-
-
 
     # Loop over adducts and fragments
 
@@ -109,7 +109,7 @@ def load_from_file(file_name,charge_counts = {},adduct_counts = {},isotope_count
 
             vote = mult_probs[str(multiplicity)]
 
-            base_name =  "{}M{}".format(mult_str,c)
+            base_name = "{}M{}".format(mult_str, c)
             # print name
             charge = 0
             charge_mass = 0
@@ -124,7 +124,7 @@ def load_from_file(file_name,charge_counts = {},adduct_counts = {},isotope_count
 
             for ad in all_vals['adducts']:
                 if not ad == 'none':
-                    name = "[{}M{}]{}".format(mult_str,ad,c)
+                    name = "[{}M{}]{}".format(mult_str, ad, c)
                 else:
                     name = base_name
                 # print name
@@ -135,40 +135,38 @@ def load_from_file(file_name,charge_counts = {},adduct_counts = {},isotope_count
                     adduct_mass = charge_mass
 
                 final_vote = ad_vote * iso_probs['mono']
-                t = Transformation(name,adduct_mass,charge=charge,multiplicity=multiplicity,vote=final_vote,adducts = ad,charge_name = c)
+                t = Transformation(name, adduct_mass, charge=charge, multiplicity=multiplicity, vote=final_vote,
+                                   adducts=ad, charge_name=c)
                 transformations.append(t)
 
                 # Note just the two isotopes -- should probably add more for multiplicity > 1
                 newname = name + '[C13]'
-                final_vote = ad_vote *iso_probs['C13']
+                final_vote = ad_vote * iso_probs['C13']
                 c13_diff = 1.0033548378
-                c13 = Transformation(newname,t.adduct_mass,charge=t.charge,
-                                     multiplicity = t.multiplicity,
-                                     isotope_diff = c13_diff,
-                                     parent = t,
-                                     vote = final_vote,
-                                     adducts = t.adducts,
-                                     charge_name = t.charge_name,
-                                     isotope = "C13")
+                c13 = Transformation(newname, t.adduct_mass, charge=t.charge,
+                                     multiplicity=t.multiplicity,
+                                     isotope_diff=c13_diff,
+                                     parent=t,
+                                     vote=final_vote,
+                                     adducts=t.adducts,
+                                     charge_name=t.charge_name,
+                                     isotope="C13")
                 transformations.append(c13)
 
                 newname = name + '[2C13]'
-                final_vote = ad_vote *iso_probs['2C13']
+                final_vote = ad_vote * iso_probs['2C13']
                 c13_diff = 1.0033548378
-                c13_2 = Transformation(newname,t.adduct_mass,charge=t.charge,
-                                       multiplicity = t.multiplicity,
-                                       isotope_diff = 2*c13_diff,
-                                       parent = c13,
-                                       vote = final_vote,
-                                       adducts = t.adducts,
-                                       charge_name = t.charge_name,
-                                       isotope = '2C13')
+                c13_2 = Transformation(newname, t.adduct_mass, charge=t.charge,
+                                       multiplicity=t.multiplicity,
+                                       isotope_diff=2 * c13_diff,
+                                       parent=c13,
+                                       vote=final_vote,
+                                       adducts=t.adducts,
+                                       charge_name=t.charge_name,
+                                       isotope='2C13')
                 transformations.append(c13_2)
 
     return transformations
-
-
-
 
     # return transformations
     # for tr in all_vals['transformations']:
@@ -211,7 +209,6 @@ def load_from_file(file_name,charge_counts = {},adduct_counts = {},isotope_count
     # 			# 											multiplicity=multiplicity,
     # 			# 											isotope_diff=isotope_diff,
     # 			# 											fragment_mass = fragment_mass))
-
 
     # final_transformations = []
     # # if 'isotopes' in all_vals:
@@ -275,12 +272,12 @@ def load_from_file(file_name,charge_counts = {},adduct_counts = {},isotope_count
     # 		charge_name = t.charge_name)
     # 		final_transformations.append(c13_4)
 
-
     # else:
     # 	final_transformations = transformations
 
     # print transformations
     return final_transformations
+
 
 class Counts(object):
     def __init__(self):
@@ -289,7 +286,7 @@ class Counts(object):
         self.isotope_counts = {}
         self.multiplicity_counts = {}
 
-    def update(self,transformation):
+    def update(self, transformation):
         if not transformation.charge_name in self.charge_counts:
             self.charge_counts[transformation.charge_name] = 1
         else:
@@ -312,17 +309,18 @@ class Counts(object):
         line = "\n\n"
         line += "Charge counts\n"
         for c in self.charge_counts:
-            line += "{}: {}\n".format(c,self.charge_counts[c])
+            line += "{}: {}\n".format(c, self.charge_counts[c])
         line += "\nAdduct counts\n"
         for a in self.adduct_counts:
-            line += "{}: {}\n".format(a,self.adduct_counts[a])
+            line += "{}: {}\n".format(a, self.adduct_counts[a])
         line += "\nIsotope counts\n"
         for i in self.isotope_counts:
-            line += "{}: {}\n".format(i,self.isotope_counts[i])
+            line += "{}: {}\n".format(i, self.isotope_counts[i])
         line += "\nMultiplicity counts\n"
         for m in self.multiplicity_counts:
-            line += "{}: {}\n".format(m,self.multiplicity_counts[m])
+            line += "{}: {}\n".format(m, self.multiplicity_counts[m])
         return line
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     load_from_file('pos_transformations.yml')

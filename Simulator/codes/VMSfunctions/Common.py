@@ -40,12 +40,13 @@ def load_obj(filename, use_joblib=True):
         else:
             return pickle.load(f)
 
+
 def chromatogramDensityNormalisation(rts, intensities):
     """
     Definition to standardise the area under a chromatogram to 1. Returns updated intensities
     """
     area = 0.0
-    for rt_index in range(len(rts)-1):
-        area += ((intensities[rt_index] + intensities[rt_index + 1])/2) / (rts[rt_index+1] - rts[rt_index])
+    for rt_index in range(len(rts) - 1):
+        area += ((intensities[rt_index] + intensities[rt_index + 1]) / 2) / (rts[rt_index + 1] - rts[rt_index])
     new_intensities = [x * (1 / area) for x in intensities]
     return new_intensities

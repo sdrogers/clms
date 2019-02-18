@@ -14,6 +14,7 @@ from sklearn.neighbors import KernelDensity
 from .Common import Peak, ChromatographicPeak, NoisyPeak, MZ, RT, INTENSITY, N_PEAKS, MZ_INTENSITY
 from VMSfunctions.transformation import *
 
+
 class DataSource(object):
     """
     A class to load and extract centroided peaks from CSV and mzML files.
@@ -22,7 +23,8 @@ class DataSource(object):
     :param min_rt: minimum RT for filtering
     :param max_rt: maximum RT for filtering
     """
-    def __init__(self, min_ms1_intensity=0, min_ms2_intensity=0, min_rt=0, max_rt=math.inf, min_sn = 10):
+
+    def __init__(self, min_ms1_intensity=0, min_ms2_intensity=0, min_rt=0, max_rt=math.inf, min_sn=10):
         # A dictionary that stores scan-level ms1 and ms2 peaks
         self.peaks = defaultdict(list)
         self.noisy_peaks = defaultdict(list)
@@ -32,7 +34,7 @@ class DataSource(object):
 
         # the list of detected ms1 chromatographic peaks extracted by xcms
         self.chrom_peaks = []
-        self.noisy_chrom_peaks = [] # low intensity noisy chromatographic peaks
+        self.noisy_chrom_peaks = []  # low intensity noisy chromatographic peaks
 
         # pymzml parameters
         self.ms1_precision = 5e-6
@@ -94,9 +96,9 @@ class DataSource(object):
         :param ms_level: level 1 or 2
         :return: an Nx1 numpy array of all the values from the data
         """
-        if data_type == N_PEAKS: # get observed peak counts across all spectra in the data
+        if data_type == N_PEAKS:  # get observed peak counts across all spectra in the data
             values = self.num_peaks[ms_level]
-        else: # get observed mz, rt or intensity values of all peaks in the data
+        else:  # get observed mz, rt or intensity values of all peaks in the data
             peaks = self.peaks[ms_level]
             values = list(getattr(x, data_type) for x in peaks)
 
@@ -136,9 +138,9 @@ class DataSource(object):
            - scan_peaks is a dictionary of all peaks across all scans
            - scan_num_peaks is a dictionary of the number of peaks for each scan
         """
-        scan_peaks = defaultdict(list)          # good quality peaks across all scans
-        noisy_peaks = defaultdict(list)         # noisy peaks across all scans (outside threshold)
-        scan_num_peaks = defaultdict(list)      # number of peaks for each ms_level per scan
+        scan_peaks = defaultdict(list)  # good quality peaks across all scans
+        noisy_peaks = defaultdict(list)  # noisy peaks across all scans (outside threshold)
+        scan_num_peaks = defaultdict(list)  # number of peaks for each ms_level per scan
         for filename in glob.glob(os.path.join(data_path, '*.mzML')):
             run = pymzml.run.Reader(filename, obo_version=self.obo_version,
                                     MS1_Precision=self.ms1_precision,
@@ -241,6 +243,7 @@ class DataSource(object):
 
 class DensityEstimator(object):
     """A class to perform kernel density estimation. Takes as input a DataSource class."""
+
     def __init__(self):
         self.kdes = {}
         self.kernel = 'gaussian'
@@ -265,8 +268,8 @@ class DensityEstimator(object):
 
     def _plot(self, kde, X, title):
         X_plot = np.linspace(np.min(X), np.max(X), 1000)[:, np.newaxis]
-        log_dens = kde.score_samples(X_plot)                
-        plt.figure()        
+        log_dens = kde.score_samples(X_plot)
+        plt.figure()
         plt.fill_between(X_plot[:, 0], np.exp(log_dens), alpha=0.5)
         plt.plot(X[:, 0], np.full(X.shape[0], -0.01), '|k')
         plt.title(title)
@@ -304,11 +307,12 @@ class PeakDensityEstimator(object):
     def n_peaks(self, ms_level, n_sample):
         return self.kdes[(N_PEAKS, ms_level)].sample(n_sample)
 
+
 # class PeakSampler(object):
 #     """A class to sample peaks from a trained density estimator"""
 #     def __init__(self, density_estimator):
 #         self.density_estimator = density_estimator
-        
+
 #     def sample(self, ms_level, n_peaks=None,ms2_mz_noise_sd=0,ms2_intensity_noise_sd=0):
 #         if n_peaks is None:
 #             n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0],0)
@@ -324,7 +328,9 @@ class PeakDensityEstimator(object):
 
 class PeakSampler(object):
     """A class to sample peaks from a trained density estimator, or from a trained density estimator and a list of compounds"""
-    def __init__(self, density_estimator, ms1_mz_source="densities", compound_list=None, transformations_file = None, transformations_prob = None):
+
+    def __init__(self, density_estimator, ms1_mz_source="densities", compound_list=None, transformations_file=None,
+                 transformations_prob=None):
         self.density_estimator = density_estimator
         self.ms1_mz_source = ms1_mz_source
         if ms1_mz_source == "compound_list":
@@ -334,9 +340,9 @@ class PeakSampler(object):
 
     def sample(self, ms_level, n_peaks=None, ms2_mz_noise_sd=0, ms2_intensity_noise_sd=0):
         if n_peaks is None:
-            n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0],0)
+            n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0], 0)
             if self.ms1_mz_source == "compound_list":
-                n_peaks = min(n_peaks,len(self.compound_list))
+                n_peaks = min(n_peaks, len(self.compound_list))
         vals = self.density_estimator.sample(ms_level, n_peaks)
         intensities = np.exp(vals[:, 1])
         rts = vals[:, 2]
@@ -344,8 +350,9 @@ class PeakSampler(object):
             ran = random.sample(range(len(self.compound_list)), n_peaks)
             mzs = []
             for i in range(n_peaks):
-                which_transformation = np.random.choice(range(len(self.transformations)),1,self.transformations_prob)
-                mzs.append(self.transformations[which_transformation[0]].reversetransform(self.compound_list[i].monisotopic_molecular_weight))
+                which_transformation = np.random.choice(range(len(self.transformations)), 1, self.transformations_prob)
+                mzs.append(self.transformations[which_transformation[0]].reversetransform(
+                    self.compound_list[i].monisotopic_molecular_weight))
         else:
             mzs = vals[:, 0]
         peaks = []
@@ -353,15 +360,15 @@ class PeakSampler(object):
             p = NoisyPeak(ms2_mz_noise_sd, ms2_intensity_noise_sd, mzs[i], rts[i], intensities[i], ms_level)
             peaks.append(p)
         return peaks
-    
-    def sample_n(self,ms_level,n_peaks=None):
+
+    def sample_n(self, ms_level, n_peaks=None):
         if n_peaks is None:
-            n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0],0)
+            n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0], 0)
             if self.ms1_mz_source == "compound_list":
-                n_peaks = min(n_peaks,len(self.compound_list))
-        return(n_peaks)
-    
-    def sample_noise_peak(self,ms_level,intensity,intensity_noise,mz_noise,rt_length=None,n_noise_peaks=None):
+                n_peaks = min(n_peaks, len(self.compound_list))
+        return (n_peaks)
+
+    def sample_noise_peak(self, ms_level, intensity, intensity_noise, mz_noise, rt_length=None, n_noise_peaks=None):
         vals = self.density_estimator.sample(ms_level, n_noise_peak)
         rts = vals[:, 2]
         intensities = [intensity for i in range(n_noise_peak)]
