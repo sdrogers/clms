@@ -2,6 +2,7 @@ import pickle
 from sklearn.externals import joblib
 import numpy as np
 import math
+import pandas as pd
 
 # some useful constants
 MZ = 'mz'
@@ -355,8 +356,52 @@ class MSN(object):
 # class RestrictedCRP(PeakGenerator):
 
 
+class Column(object):
+    def __init__(self, type, data_file=None):
+        self.type = type
+        self.chromatograms = []
+        if data_file is not None:
+            self.chromatogram = self._load_xcms_df(data_file)
 
+    def getChromatograms(self):
+        return self.chromatograms
 
+    def _load_xcms_df(self, df_file):
+        """
+        Load CSV file of chromatogram information exported by the XCMS script 'process_data.R'
+        :param df_file: the input csv file exported by the script (in gzip format)
+        :return: a list of Chromatogram objects
+        """
+        df = pd.read_csv(df_file, compression='gzip')
+        peak_ids = df.id.unique()
+        groups = df.groupby('id')
+        chroms = []
+        noises = []
+        for i in range(len(peak_ids)):
+            if i % 5000 == 0:
+                print(i)
+            pid = peak_ids[i]
+            p = self._get_chrom_peak(groups, pid)
+            chroms.append(p)
+        return chroms
+
+    def _get_chrom_peak(self, groups, pid):
+        """
+        Constructs a Peak object from groups in the dataframe.
+        :param groups: pandas group object, produced from df.groupby('id'), i.e. each group is a set of rows
+        grouped by the 'id' column in the dataframe.
+        :param pid: the peak id
+        :return: an MS1 chromatographic peak object
+        """
+        selected = groups.get_group(pid)
+        rts = self._get_values(selected, 'rt_values')
+        mzs = self._get_values(selected, 'mz_values')
+        intensities = self._get_values(selected, 'intensity_values')
+        ec = EmpiricalChromatogram(rts, mzs, intensities)
+        return ec
+
+    def _get_values(self, df, column_name):
+        return df[column_name].values
 
 
 # class Peak(object):
