@@ -46,13 +46,28 @@ def load_obj(filename, use_joblib=True):
 
 # Formulae C12H6N2
 
-# class Formula(object):
+# this needs completely redesigning - is basically a dummy function in a workable format
+class Formula(object):
 
-#     def __init__(self, formula_string):
-#         self.formula_string = formula_string
-
-#     def get_isotope_distribution(self, proportion):
-#         raise NotImplementedError()
+    def __init__(self, formula_string, mz, max_intensity, isotope_proportions):
+        self.formula_string = formula_string
+        self.mz = mz # remove eventually
+        self.max_intensity = max_intensity # remove eventually
+        self.isotope_proportions = isotope_proportions # remove eventually     
+        
+    def get_mz_peaks(self):
+        # update this to work properly
+        peaks = []
+        for i in range(len(self.mz)):
+            peaks.extend([(self.mz[i], self.max_intensity * self.isotope_proportions[i])])
+        return peaks
+    # outputs [[(mz_1,max_intensity_1),...,(mz_n,max_intensity_n)], isoptopes, isoptope_proportions]
+    
+    def get_names(self):
+        return ["M+H","Other"]
+    
+    def get_proportions(self):
+        return self.isotope_proportions
 
 class Chemical(object):
     
@@ -62,115 +77,93 @@ class Chemical(object):
     def get_mz_peaks(self, rt, ms_level, isolation_windows):
         raise NotImplementedError()
         
-    def _rt_match(self, query_rt): # could remove this if we wanted to link chemicals and MSNs
-        raise NotImplementedError()
+    def get_mz_peaks(self, query_rt, ms_level, isolation_windows):
+        if ms_level == 1:
+            if not self._rt_match(query_rt):
+                return None
+        mz_peaks = []
+        for which_isotope in range(len(self.isotopes)):
+            if ms_level ==1 and self.ms_level == 1:
+                if self._isolation_match(query_rt, isolation_windows[0], which_isotope): # check just first set of windows
+                    intensity = self._get_intensity(query_rt, which_isotope)
+                    mz = self._get_mz(query_rt, which_isotope)
+                    return [(mz, intensity)]
+            elif ms_level == self.ms_level:
+                intensity = self._get_intensity(query_rt, which_isotope)
+                mz = self._get_mz(query_rt, which_isotope)
+                return [(mz, intensity)]
+            else:
+                if self._isolation_match(query_rt, isolation_windows[self.ms_level-1], which_isotope) and self.children != None:
+                    for i in range(len(self.children)):
+                        mz_peaks.extend(self.children[i].get_mz_peaks(query_rt,ms_level,isolation_windows))
+                else:
+                    return []
+        if mz_peaks == []:
+            return None
+        else:
+            return mz_peaks
+        
+    def _rt_match(self, query_rt):
+        if self.ms_level == 1:
+            if self.chromatogram._rt_match(query_rt - self.rt) == True:
+                return True
+            else:
+                return False
+        else:
+            True
+        
+    def _get_intensity(self, query_rt, which_isotope):
+        if self.ms_level == 1:
+            return self.isotopes[which_isotope][1] * self.chromatogram.get_relative_intensity(query_rt - self.rt)
+        else:
+            return (self.parent._get_intensity(query_rt, which_isotope) * self.parent_mass_prop)
 
-# what differences are there going to be between these two chemicals?
-# can we religate most things to the Chemical class?
+    def _get_mz(self, query_rt, which_isotope):
+        if self.ms_level == 1:
+            return (self.isotopes[which_isotope][0] + self.chromatogram.get_relative_mz(query_rt - self.rt))
+        else:
+            return self.isotopes[0][0]
+            
+    def _isolation_match(self, query_rt, isolation_windows, which_isotope):                        
+        # assumes list is formated like:
+        # [(min_1,max_1),(min_2,max_2),...]
+        for window in isolation_windows:
+            if (self._get_mz(query_rt, which_isotope) > window[0] and self._get_mz(query_rt, which_isotope) <= window[1]):
+                return True
+        return False
 
 class UnknownChemical(Chemical):
     """
     Chemical from an unknown chemical formula
     """
     def __init__(self, mz, rt, max_intensity, chromatogram, children):
-        self.mz = mz
+        self.isotopes = [(mz, max_intensity)]
         self.rt = rt
-        self.max_intensity = max_intensity
         self.chromatogram = chromatogram
         self.children = children
+        self.isotope_names = ["M+H"]
+        self.isotope_proportions = [1]
+        self.ms_level = 1
         
     def __repr__(self):
-        return 'Peak mz=%.4f rt=%.2f intensity=%.2f' % (self.mz, self.rt, self.max_intensity)
+         return 'UnknownChemical mz=%.4f rt=%.2f max_intensity=%.2f' % (self.isotopes[0][0], self.rt, self.isotopes[0][1])
 
-    def get_mz_peaks(self, query_rt, ms_level, isolation_windows):
-        if not self._rt_match(query_rt):
-            return None
-        if not self._isolation_match(query_rt, isolation_windows[0]):
-            return None
-        if ms_level == 1:
-            intensity = self._get_intensity(query_rt)
-            mz = self._get_mz(query_rt)
-            return [(mz, intensity)]
-        else:
-            mz_peaks = []
-            for i in range(len(self.children)):
-                mz_peaks.extend(self.children[i].get_mz_peaks(query_rt,ms_level,isolation_windows))
-            return mz_peaks
-        
-    def _get_mz(self, query_rt):
-        return self.mz + self.chromatogram.get_relative_mz(query_rt - self.rt)
-        
-    def _get_intensity(self, query_rt):
-        return(self.max_intensity * self.chromatogram.get_relative_intensity(query_rt - self.rt))
-    
-    def _rt_match(self, query_rt):
-        if self.chromatogram._rt_match(query_rt - self.rt) == True:
-            return True
-        else:
-            return False
-
-    def _isolation_match(self, query_rt, isolation_windows):                        
-        # assumes list is formated like:
-        # [[(ms1_min_1,ms1_max_1),(ms1_min_2,ms1_max_2),...],...,[(msn_min_1,msn_max_1),(msn_min_2,msn_max_2),...]]
-        for window in isolation_windows:
-            if (self._get_mz(query_rt) > window[0] and self._get_mz(query_rt) <= window[1]):
-                return True
-        return False
-
-# not tested
 class KnownChemical(Chemical):
     """
     Chemical from an known chemical formula
     """
-    def __init__(self, compound, rt, max_itensity, chromatogram, children, transformation_proportions, transformations):
-        self.name = compound.name
-        self.formula = compound.chemical_formula
-        self.mz = compound.monisotopic_molecular_weight 
+    def __init__(self, formula, rt, max_itensity, chromatogram, children):
+        self.formula = formula.formula_string
         self.rt = rt
-        self.max_intensity = max_intensity
         self.chromatogram = chromatogram
         self.children = children
-        self.transformation_proportions = transformation_proportions
-        # assume written as [0.9,0.1,0,...] for all posssible tranformations
-        self.transformations = transformations
-        
+        self.isotopes = formula.get_mz_peaks()
+        self.isotope_names = formula.get_names()
+        self.isotope_proportions = formula.get_proportions()
+        self.ms_level = 1
+    
     def __repr__(self):
-        return 'Peak mz=%.4f rt=%.2f intensity=%.2f' % (self.mz, self.rt, self.max_intensity)
-        
-    def get_mz_peaks(self, query_rt, ms_level, isolation_windows):
-        if not self._rt_match(query_rt):
-            return None
-        mz_peaks = []
-        for t in range(len(self.transformations)):
-            if self._isolation_match(query_rt, isolation_windows) and self.transformations_proportion>0:
-                if ms_level == 1:
-                    intensity = self._get_intensity(query_rt, which_transformation)
-                    mz = self._get_mz(query_rt, which_transformation)
-                    mz_peaks.append([(mz, intensity)])
-                else:
-                    for i in range(len(self.children)):
-                        mz_peaks.extend(self.children[i].get_mz_peaks(query_rt,ms_level,isolation_windows))
-        
-    def _get_mz(self, query_rt, which_transformation):
-        base_mz = self.mz + self.chromatogram.get_relative_mz(query_rt - self.rt)
-        return self.transformations[which_transformation].transform(base_mz)
-                 
-    def _get_intensity(self, query_rt, which_transformation):
-        return(self.max_intensity * self.chromatogram.get_relative_intensity(query_rt - self.rt) * self.transformation_proportions[which_transformation])
-        
-    def _rt_match(self, query_rt):
-        if self.chromatogram._rt_match(query_rt - self.rt) == True:
-            return True
-        else:
-            return False
-        
-    def _isolation_match(self, query_rt, isolation_windows):                        
-        # assumes list is formated like:
-        # [[(ms1_min_1,ms1_max_1),(ms1_min_2,ms1_max_2),...],...,[(msn_min_1,msn_max_1),(msn_min_2,msn_max_2),...]]
-        for window in isolation_windows:
-            if (self._get_mz(query_rt, which_transformation) > window[0] and self._get_mz(query_rt, which_transformation) <= window[1]):
-                return True
-        return False
+         return 'KnownChemical - %r' % (self.formula)
 
 
 # do we need a class which incorporates both KnownChemical and UnknownChemical
@@ -294,53 +287,19 @@ class FunctionalChromatogram(Chromatogram):
             return True
        
 
-class MSN(object):
+class MSN(Chemical):
     """
     ms2+ fragments
     """
-    def __init__(self, mz,
-                 ms_level,                          # the ms-level: 1, 2, ...
-                 parent_mass_prop,                  # proportion of parents mass
-                 children=None,                     # other MSN objects which are children
-                 parent= None):
-        self.mz = mz
+    def __init__(self, mz, ms_level, parent_mass_prop, children=None, parent= None):
+        self.isotopes = [(mz,None)]
         self.ms_level = ms_level
         self.parent_mass_prop = parent_mass_prop
         self.children = children
         self.parent = parent
-
-    def __repr__(self):
-        return 'Peak mz=%.4f ms_level=%d' % (self.mz, self.ms_level) # may need to update naming convention
-
-    def get_mz_peaks(self, query_rt, ms_level, isolation_windows):
-        if not self._isolation_match(query_rt, isolation_windows[ms_level-1]):
-            return None
-        if ms_level == self.ms_level:
-            intensity = self._get_intensity(query_rt)
-            mz = self._get_mz(query_rt)
-            return [(mz, intensity)]
-        else:
-            if self.children == None:
-                return []
-            else:
-                mz_peaks = []
-                for i in range(len(self.children)):
-                    mz_peaks.extend(self.children[i].get_mz_peaks(query_rt, ms_level,isolation_windows))
-                return mz_peaks
-            
-    def _get_mz(self, query_rt):
-        return self.mz
         
-    def _get_intensity(self, query_rt):
-        return self.parent._get_intensity(query_rt) * self.parent_mass_prop
-    
-    def _isolation_match(self, query_rt, isolation_windows):
-        # assumes list is formated like:
-        # [(min_1,max_1),(min_2,max_2),...],
-        for window in isolation_windows:
-            if (self._get_mz(query_rt) > window[0] and self._get_mz(query_rt) <= window[1]):
-                return True
-        return False
+    def __repr__(self):
+         return 'MSN Fragment mz=%.4f ms_level=%d' % (self.isotopes[0][0], self.ms_level)
         
 # class Controller:
 
