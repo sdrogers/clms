@@ -2,6 +2,7 @@ import pandas as pd
 import scipy
 from VMSfunctions.Common import chromatogramDensityNormalisation
 
+
 class Chemical(object):
 
     def __repr__(self):
@@ -10,8 +11,9 @@ class Chemical(object):
     def get_mz_peaks(self, rt, ms_level, isolation_windows):
         raise NotImplementedError()
 
-    def _rt_match(self, query_rt): # could remove this if we wanted to link chemicals and MSNs
+    def _rt_match(self, query_rt):  # could remove this if we wanted to link chemicals and MSNs
         raise NotImplementedError()
+
 
 # what differences are there going to be between these two chemicals?
 # can we religate most things to the Chemical class?
@@ -20,6 +22,7 @@ class UnknownChemical(Chemical):
     """
     Chemical from an unknown chemical formula
     """
+
     def __init__(self, mz, rt, max_intensity, chromatogram, children):
         self.mz = mz
         self.rt = rt
@@ -42,14 +45,14 @@ class UnknownChemical(Chemical):
         else:
             mz_peaks = []
             for i in range(len(self.children)):
-                mz_peaks.extend(self.children[i].get_mz_peaks(query_rt ,ms_level ,isolation_windows))
+                mz_peaks.extend(self.children[i].get_mz_peaks(query_rt, ms_level, isolation_windows))
             return mz_peaks
 
     def _get_mz(self, query_rt):
         return self.mz + self.chromatogram.get_relative_mz(query_rt - self.rt)
 
     def _get_intensity(self, query_rt):
-        return(self.max_intensity * self.chromatogram.get_relative_intensity(query_rt - self.rt))
+        return (self.max_intensity * self.chromatogram.get_relative_intensity(query_rt - self.rt))
 
     def _rt_match(self, query_rt):
         if self.chromatogram._rt_match(query_rt - self.rt) == True:
@@ -65,12 +68,15 @@ class UnknownChemical(Chemical):
                 return True
         return False
 
+
 # not tested
 class KnownChemical(Chemical):
     """
     Chemical from an known chemical formula
     """
-    def __init__(self, compound, rt, max_intensity, chromatogram, children, transformation_proportions, transformations):
+
+    def __init__(self, compound, rt, max_intensity, chromatogram, children, transformation_proportions,
+                 transformations):
         self.name = compound.name
         self.formula = compound.chemical_formula
         self.mz = compound.monisotopic_molecular_weight
@@ -90,21 +96,22 @@ class KnownChemical(Chemical):
             return None
         mz_peaks = []
         for t in range(len(self.transformations)):
-            if self._isolation_match(query_rt, isolation_windows) and self.transformations_proportion >0:
+            if self._isolation_match(query_rt, isolation_windows) and self.transformations_proportion > 0:
                 if ms_level == 1:
                     intensity = self._get_intensity(query_rt, which_transformation)
                     mz = self._get_mz(query_rt, which_transformation)
                     mz_peaks.append([(mz, intensity)])
                 else:
                     for i in range(len(self.children)):
-                        mz_peaks.extend(self.children[i].get_mz_peaks(query_rt ,ms_level ,isolation_windows))
+                        mz_peaks.extend(self.children[i].get_mz_peaks(query_rt, ms_level, isolation_windows))
 
     def _get_mz(self, query_rt, which_transformation):
         base_mz = self.mz + self.chromatogram.get_relative_mz(query_rt - self.rt)
         return self.transformations[which_transformation].transform(base_mz)
 
     def _get_intensity(self, query_rt, which_transformation):
-        return(self.max_intensity * self.chromatogram.get_relative_intensity(query_rt - self.rt) * self.transformation_proportions[which_transformation])
+        return (self.max_intensity * self.chromatogram.get_relative_intensity(query_rt - self.rt) *
+                self.transformation_proportions[which_transformation])
 
     def _rt_match(self, query_rt):
         if self.chromatogram._rt_match(query_rt - self.rt) == True:
@@ -116,7 +123,9 @@ class KnownChemical(Chemical):
         # assumes list is formated like:
         # [[(ms1_min_1,ms1_max_1),(ms1_min_2,ms1_max_2),...],...,[(msn_min_1,msn_max_1),(msn_min_2,msn_max_2),...]]
         for window in isolation_windows:
-            if (self._get_mz(query_rt, which_transformation) > window[0] and self._get_mz(query_rt, which_transformation) <= window[1]):
+            if (self._get_mz(query_rt, which_transformation) > window[0] and self._get_mz(query_rt,
+                                                                                          which_transformation) <=
+                    window[1]):
                 return True
         return False
 
@@ -266,6 +275,7 @@ class MSN(object):
                 return True
         return False
 
+
 class Column(object):
     def __init__(self, type, data_file=None):
         self.type = type
@@ -312,6 +322,7 @@ class Column(object):
 
     def _get_values(self, df, column_name):
         return df[column_name].values
+
 
 class Compound(object):
     def __init__(self, name, chemical_formula, monisotopic_molecular_weight, smiles, inchi, inchikey):
