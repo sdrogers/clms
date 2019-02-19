@@ -22,60 +22,83 @@ class Compound(object):
 class Formula(object):
     def __init__(self, formula_string, mz):
         self.formula_string = formula_string
-        self.mz = mz # calculate this
+        self.mz = mz # calculate this later
         
     def _get_mz(self):
         return self.mz
     
     def _get_n_element(self, element):
-        return None
+        if self.formula_string == element:
+            return 1
+        split_formula = self.formula_string.split(element)
+        if(len(split_formula)==1):
+            return 0
+        for i in range(len(split_formula)):
+            if split_formula[i+1][0].isdigit():
+                return float(re.split('[A-Z]+',split_formula[i+1])[0])
+            else:
+                if split_formula[i+1][0].islower():
+                    pass
+                else:
+                    return 1
+        return 0
     
 class Isotopes(object):
-    def __init__(self, formula, isotope_proportions, isotope_names):
+    def __init__(self, formula):
         self.formula = formula
-        self.isotope_proportions = isotope_proportions # remove eventually
-        self.isotope_names = isotope_names # remove eventually
+        self.C12_proportion = 0.989
         self.mz_diff = 1.0033548378
         
-    def get_isotopes(self):
+    def get_isotopes(self, total_proportion):
         # update this to work properly
-        peaks = []
-        for i in range(len(self.isotope_names)):
-            peaks.extend([(self._get_isotope_mz(self._get_isotope_names()[i]), self._get_isotope_proportions()[i], self._get_isotope_names()[i])])
+        peaks = [() for i in range(len(self._get_isotope_proportions(total_proportion)))]
+        for i in range(len(peaks)):
+            peaks[i] += (self._get_isotope_mz(self._get_isotope_names(i)),)
+            peaks[i] += (self._get_isotope_proportions(total_proportion)[i],)
+            peaks[i] += (self._get_isotope_names(i),)
         return peaks
     # outputs [(mz_1, intensity_proportion_1, isotope_name_1),...,(mz_n, intensity_proportion_n, isotope_name_n)]
     
-    def _get_isotope_proportions(self):
-        return self.isotope_proportions
+    def _get_isotope_proportions(self, total_proportion):
+        proportions = [] 
+        while sum(proportions) < total_proportion:
+            proportions.extend([scipy.stats.binom.pmf(len(proportions),self.formula._get_n_element("C"),1-self.C12_proportion)])        
+        normalised_proportions = [proportions[i]/sum(proportions) for i in range(len(proportions))]
+        return normalised_proportions
     
-    def _get_isotope_names(self):
-        return self.isotope_names
+    def _get_isotope_names(self, isotope_number):
+        if isotope_number == 0:
+            return "Mono"
+        else:
+            return str(isotope_number) + "C13"
     
     def _get_isotope_mz(self, isotope):
         if isotope == "Mono":
             return self.formula._get_mz()
-        elif isotope == "1C13":
-            return self.formula._get_mz() + self.mz_diff
-        elif isotope == "2C13":
-            self.formula.get_mz() + 2 * self.mz_diff
+        elif isotope[-3:] == "C13":
+            return self.formula._get_mz() - float(isotope.split("C13")[0]) * self.mz_diff
         else:
             return None
             # turn this into a proper function
-            
+
 class Aducts(object):
-    def __init__(self, formula, aduct_names, aduct_proportions):
-        self.aduct_names = aduct_names # remove eventually
-        self.aduct_proportions = aduct_proportions # remove eventually
+    def __init__(self, formula):
+        self.aduct_names = ["M+H", "[M+ACN]+H", "[M+CH3OH]+H", "[M+NH3]+H"] # remove eventually
         self.formula = formula
         
     def get_aducts(self):
         aducts = []
+        proportions = self._get_aduct_proportions()
         for j in range(len(self.aduct_names)):
-            aducts.extend([(self._get_aduct_names()[j], self._get_aduct_proportions()[j])])
+            if proportions[j] != 0:
+                aducts.extend([(self._get_aduct_names()[j], proportions[j])])
         return aducts
     
     def _get_aduct_proportions(self):
-        return self.aduct_proportions
+        # replace this with something proper
+        proportions = np.random.binomial(1,0.1,3) * np.random.uniform(0.1,0.2,3)
+        proportions = [1-sum(proportions)] + proportions.tolist()
+        return proportions
     
     def _get_aduct_names(self):
         return self.aduct_names
