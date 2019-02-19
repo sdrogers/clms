@@ -5,6 +5,20 @@ import sys
 import scipy.stats
 from VMSfunctions.Common import chromatogramDensityNormalisation, aductTransformation
 
+
+# Compound was just something I wrote to fill with the stuff I extracted from the HMBD database
+# wouldnt go into any of the stuff you are writing
+# could potentially be used to fill 'Formula' which could then be used to create Chemicals
+class Compound(object):
+    def __init__(self, name, chemical_formula, monisotopic_molecular_weight, smiles, inchi, inchikey):
+        self.name = name
+        self.chemical_formula = chemical_formula
+        self.monisotopic_molecular_weight = monisotopic_molecular_weight
+        self.smiles = smiles
+        self.inchi = inchi
+        self.inchikey = inchikey
+
+
 class Formula(object):
     def __init__(self, formula_string, mz):
         self.formula_string = formula_string
@@ -280,14 +294,16 @@ class FunctionalChromatogram(Chromatogram):
         else:
             return True
 
-class Column(object):
-    def __init__(self, type, data_file=None):
-        self.type = type
-        self.chromatograms = []
-        if data_file is not None:
-            self.chromatogram = self._load_xcms_df(data_file)
 
-    def getChromatograms(self):
+class Column(object):
+    def __init__(self, type, chemicals=[], data_file=None):
+        self.type = type
+        self.chemicals = chemicals
+        if data_file is not None:
+            self.chemicals = self._load_xcms_df(data_file)
+        self.chromatograms = [x.chromatogram for x in self.chemicals]
+
+    def get_chromatograms(self):
         return self.chromatograms
 
     def _load_xcms_df(self, df_file):
@@ -299,69 +315,108 @@ class Column(object):
         df = pd.read_csv(df_file, compression='gzip')
         peak_ids = df.id.unique()
         groups = df.groupby('id')
-        chroms = []
-        noises = []
+        chemicals = []
         for i in range(len(peak_ids)):
             if i % 5000 == 0:
                 print(i)
             pid = peak_ids[i]
-            p = self._get_chrom_peak(groups, pid)
-            chroms.append(p)
-        return chroms
+            chem = self._get_chemical(groups, pid)
+            if chem is not None:
+                chemicals.append(chem)
+        return chemicals
 
-    def _get_chrom_peak(self, groups, pid):
+    def _get_chemical(self, groups, pid):
         """
-        Constructs a Peak object from groups in the dataframe.
+        Constructs an EmpiricalChromarogram object from groups in the dataframe.
         :param groups: pandas group object, produced from df.groupby('id'), i.e. each group is a set of rows
         grouped by the 'id' column in the dataframe.
         :param pid: the peak id
         :return: an MS1 chromatographic peak object
         """
         selected = groups.get_group(pid)
+        mz = self._get_value(selected, 'mz')
+        rt = self._get_value(selected, 'rt')
+        max_intensity = self._get_value(selected, 'maxo')
         rts = self._get_values(selected, 'rt_values')
         mzs = self._get_values(selected, 'mz_values')
         intensities = self._get_values(selected, 'intensity_values')
-        ec = EmpiricalChromatogram(rts, mzs, intensities)
-        return ec
+        assert len(rts) == len(mzs)
+        assert len(rts) == len(intensities)
+        if len(rts) > 1:
+            ec = EmpiricalChromatogram(rts, mzs, intensities)
+            children = []
+            chem = UnknownChemical(mz, rt, max_intensity, ec, children)
+        else:
+            chem = None
+        return chem
+
+    def _get_value(self, df, column_name):
+        return self._get_values(df, column_name)[0]
 
     def _get_values(self, df, column_name):
         return df[column_name].values
 
+# controller sends scan request
+# mass spec generates scans (is an iterator over scans)
+# scan contains: mz list, intensity list, rt, ms_level, precursor_mass, window
+# simplest controller: just generates ms1 data
 
-class Compound(object):
-    def __init__(self, name, chemical_formula, monisotopic_molecular_weight, smiles, inchi, inchikey):
-        self.name = name
-        self.chemical_formula = chemical_formula
-        self.monisotopic_molecular_weight = monisotopic_molecular_weight
-        self.smiles = smiles
-        self.inchi = inchi
-        self.inchikey = inchikey
+class MassSpectrometer(object):
+    # Make a generator
+    def __next__(self):
+        raise NotImplementedError()
 
-# do we need a class which incorporates both KnownChemical and UnknownChemical
-# for now would add no noise, but would make future addition of noise easier
-# we would need to tell Ronan if we were to do this, so he could adjust how the MassSpectrometer stores Chemicals
+class Scan(object):
+    def __init__(self, scan_id, mzs, intensities, ms_level, rt):
+        self.scan_id = scan_id
+        self.mzs = mzs
+        self.intensities = intensities
+        self.ms_level = ms_level
+        self.rt = rt
 
-# method for generating list chemicals
+    def __repr__(self):
+        return 'Scan %d -- num_peaks=%d rt=%.2f ms_level=%d' % (self.scan_id, len(self.mzs), self.rt, self.ms_level)
 
-# class MassSpectrometer:
-#     # Make a generator
+# Independent here refers to how the intensity of each peak in a scan is independent of each other
+# i.e. there's no ion supression effect
+class IndependentMassSpectrometer(MassSpectrometer):
+    def __init__(self, column, scan_intervals, scan_levels):
+        self.column = column
+        self.scan_intervals = scan_intervals
+        self.scan_levels = scan_levels
+        self.chromatograms = column.get_chromatograms()
+        self.idx = 0
 
-#     def __next__(self):
-#         raise NotImplementedError()
+    def __iter__ (self):
+        return self
 
-# class IndependentMassSpectrometer(MassSpectrometer):
+    def __next__ (self):
+        try:
+            time = self.scan_intervals[self.idx]
+            level = self.scan_levels[self.idx]
+            if level == 1:
+                scan = self._get_ms1_scan(time)
+            else:
+                raise NotImplementedError()
+        except IndexError:
+            raise StopIteration()
+        self.idx += 1
+        return scan
+
+    def _get_ms1_scan(self, time):
+        """
+        Constructs a scan at a particular timepoint
+        :param time: the timepoint
+        :return: a mass spectrometry scan at that time
+        """
+        mzs = []
+        intensities = []
+        return Scan(self.idx, mzs, intensities, 1, time)
+
 
 # class ThermoFusionMassSpectrometer:
 
 #     def __next__(self):
-#         raise NotImplementedError()
-
-# class Formula(object):
-
-#     def __init__(self, formula_string):
-#         self.formula_string = formula_string
-
-#     def get_isotope_distribution(self, proportion):
 #         raise NotImplementedError()
 
 # class Controller:
