@@ -3,6 +3,8 @@ import scipy
 import numpy as np
 import sys
 import scipy.stats
+import re
+
 from VMSfunctions.Common import chromatogramDensityNormalisation, aductTransformation
 
 
@@ -22,7 +24,7 @@ class Compound(object):
 class Formula(object):
     def __init__(self, formula_string, mz):
         self.formula_string = formula_string
-        self.mz = mz # calculate this later
+        self.mz = mz # TODO: calculate this later from the formula_string
         
     def _get_mz(self):
         return self.mz
@@ -95,7 +97,7 @@ class Aducts(object):
         return aducts
     
     def _get_aduct_proportions(self):
-        # replace this with something proper
+        # TODO: replace this with something proper
         proportions = np.random.binomial(1,0.1,3) * np.random.uniform(0.1,0.2,3)
         proportions = [1-sum(proportions)] + proportions.tolist()
         return proportions
@@ -319,15 +321,70 @@ class FunctionalChromatogram(Chromatogram):
 
 
 class Column(object):
-    def __init__(self, type, chemicals=[], data_file=None):
+    def __init__(self, type, peak_sampler):
         self.type = type
-        self.chemicals = chemicals
-        if data_file is not None:
-            self.chemicals = self._load_xcms_df(data_file)
-        self.chromatograms = [x.chromatogram for x in self.chemicals]
+        self.peak_sampler = peak_sampler
+        self.chromatograms = []
+        self.chemicals = []
 
     def get_chromatograms(self):
         return self.chromatograms
+
+    def get_chemicals(self):
+        return self.chemicals
+
+    def _sample_peaks(self):
+        """
+        Samples peaks
+        :return: the sampled peaks, where the number of peaks is also drawn from a density
+        """
+        return self.peak_sampler.sample(ms_level=1)
+
+    def _sample_peak(self, n_peaks):
+        """
+        Samples just n_peaks from the densities
+        :param n_peaks: the number of peaks to generate
+        :return: the sampled peaks
+        """
+        return self.peak_sampler.sample(ms_level=1, n_peaks=n_peaks)
+
+
+class KnownColumn(Column):
+    """
+    Represents a chromatographic column of known compounds
+    """
+    def __init__(self, type, formula_strings, peak_sampler):
+        super().__init__(type, peak_sampler)
+        for fs in formula_strings:
+            p = self._sample_peak(1)[0]
+            mz = p.mz # TODO: mz should be calculated from the formula string instead
+            rt = p.rt
+            max_intensity = p.intensity
+            formula = Formula(fs, mz)
+            isotopes = Isotopes(formula)
+            adducts = Aducts(formula)
+            chrom = FunctionalChromatogram("normal", [0, 1])
+            chem = KnownChemical(formula, isotopes, adducts, rt, max_intensity, chrom, None)
+            self.chemicals.append(chem)
+            self.chromatograms.append(chrom)
+
+class UnknownColumn(Column):
+    """
+    Represents a chromatographic column of unknown chemical compounds that go into the LC-MS instruments.
+    """
+    def __init__(self, type, num_chemicals, peak_sampler, xcms_output):
+        super().__init__(type, peak_sampler)
+        print('Loading observed chromatograms')
+        observed_chemicals = self._load_xcms_df(xcms_output)
+        observed_chromatograms = [x.chromatogram for x in observed_chemicals]
+
+        # now generates UnknownChemical n-times
+        for i in range(num_chemicals):
+            p = self._sample_peak(1)[0]
+            chrom = self._sample_chromatogram(observed_chromatograms)
+            chem = UnknownChemical(p.mz, p.rt, p.intensity, chrom, None)
+            self.chemicals.append(chem)
+            self.chromatograms.append(chrom)
 
     def _load_xcms_df(self, df_file):
         """
@@ -366,9 +423,8 @@ class Column(object):
         assert len(rts) == len(mzs)
         assert len(rts) == len(intensities)
         if len(rts) > 1:
-            ec = EmpiricalChromatogram(rts, mzs, intensities)
-            children = []
-            chem = UnknownChemical(mz, rt, max_intensity, ec, children)
+            chrom = EmpiricalChromatogram(rts, mzs, intensities)
+            chem = UnknownChemical(mz, rt, max_intensity, chrom, None)
         else:
             chem = None
         return chem
@@ -378,6 +434,12 @@ class Column(object):
 
     def _get_values(self, df, column_name):
         return df[column_name].values
+
+    def _sample_chromatogram(self, observed_chromatograms):
+        # TODO: sample a chromatogram for this Chemical. For now, we just choose one randomly
+        selected = np.random.choice(len(observed_chromatograms), 1)[0]
+        return observed_chromatograms[selected]
+
 
 # controller sends scan request
 # mass spec generates scans (is an iterator over scans)
@@ -432,6 +494,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
         :param time: the timepoint
         :return: a mass spectrometry scan at that time
         """
+        # TODO: generates a Scan for a particular timepoint
         mzs = []
         intensities = []
         return Scan(self.idx, mzs, intensities, 1, time)
