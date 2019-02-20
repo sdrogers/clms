@@ -1,18 +1,30 @@
 import glob
-import os
 import math
 from collections import defaultdict
-import copy
-import random
 
 import numpy as np
+import os
 import pylab as plt
-import pandas as pd
 import pymzml
 from sklearn.neighbors import KernelDensity
 
-from .Common import Peak, ChromatographicPeak, NoisyPeak, MZ, RT, INTENSITY, N_PEAKS, MZ_INTENSITY
-from VMSfunctions.transformation import *
+from .Common import MZ, RT, INTENSITY, N_PEAKS, MZ_INTENSITY
+
+
+class PeakSample(object):
+    """
+    A simple class to represent an empirical or sampled scan-level peak object
+    """
+
+    def __init__(self, mz, rt, intensity, ms_level):
+        self.mz = mz
+        self.rt = rt
+        self.intensity = intensity
+        self.ms_level = ms_level
+
+    def __repr__(self):
+        return 'PeakSample mz=%.4f rt=%.2f intensity=%.2f ms_level=%d' % (self.mz, self.rt, self.intensity, self.ms_level)
+
 
 
 class DataSource(object):
@@ -24,17 +36,13 @@ class DataSource(object):
     :param max_rt: maximum RT for filtering
     """
 
-    def __init__(self, min_ms1_intensity=0, min_ms2_intensity=0, min_rt=0, max_rt=math.inf, min_sn=10):
+    def __init__(self, min_ms1_intensity=0, min_ms2_intensity=0, min_rt=0, max_rt=math.inf):
         # A dictionary that stores scan-level ms1 and ms2 peaks
         self.peaks = defaultdict(list)
         self.noisy_peaks = defaultdict(list)
 
         # A dictionary to store the distribution on the number of peaks per scan for each ms_level
         self.num_peaks = defaultdict(list)
-
-        # the list of detected ms1 chromatographic peaks extracted by xcms
-        self.chrom_peaks = []
-        self.noisy_chrom_peaks = []  # low intensity noisy chromatographic peaks
 
         # pymzml parameters
         self.ms1_precision = 5e-6
@@ -45,7 +53,6 @@ class DataSource(object):
         self.min_ms2_intensity = min_ms2_intensity
         self.min_rt = min_rt
         self.max_rt = max_rt
-        self.min_sn = min_sn
 
     def load_data(self, ms1_df, mzml_path):
         """
@@ -56,13 +63,6 @@ class DataSource(object):
         :return: nothing, but the instance variables self.peaks and self.num_peaks will be populated by the peak objects
         at different ms level.
         """
-        print('Loading ms1 data')
-        chrom_peaks, noisy_signals = self._load_xcms_df(ms1_df)
-        normalised_chrom_peaks = self._normalise_chrom_peaks(chrom_peaks)
-        self.chrom_peaks = normalised_chrom_peaks
-        self.noisy_chrom_peaks = noisy_signals
-
-        print('Loading ms2 data')
         scan_peaks, scan_num_peaks, scan_noisy_peaks = self._load_mzml(mzml_path)
         self.peaks = scan_peaks
         self.noisy_peaks = scan_noisy_peaks
@@ -108,28 +108,6 @@ class DataSource(object):
             X = np.log(X)
         return X
 
-    def _load_xcms_df(self, df_file):
-        """
-        Load CSV file exported by the XCMS script 'process_data.R'
-        :param df_file: the input csv file (in gzip format)
-        :return: the list of loaded Peak objects.
-        """
-        df = pd.read_csv(df_file, compression='gzip')
-        peak_ids = df.id.unique()
-        groups = df.groupby('id')
-        peaks = []
-        noises = []
-        for i in range(len(peak_ids)):
-            if i % 5000 == 0:
-                print(i)
-            pid = peak_ids[i]
-            p = self._get_chrom_peak(groups, pid)
-            if self._valid_peak(p):
-                peaks.append(p)
-            else:
-                noises.append(p)
-        return peaks, noises
-
     def _load_mzml(self, data_path):
         """
         Load MS1 and MS2 peaks from scan data from all mzML files in data_path
@@ -157,7 +135,7 @@ class DataSource(object):
                     if units == 'minute':
                         rt *= 60.0
 
-                    p = Peak(mz, rt, intensity, ms_level)
+                    p = PeakSample(mz, rt, intensity, ms_level)
                     if self._valid_peak(p):
                         spectrum_peaks[ms_level].append(p)
                     else:
@@ -173,60 +151,6 @@ class DataSource(object):
             print('%s (ms1=%d, ms2=%d)' % (filename, total_peaks[1], total_peaks[2]))
         return scan_peaks, scan_num_peaks, noisy_peaks
 
-    def _normalise_chrom_peaks(self, peaks):
-        """
-        Normalise chromatographic peak signals:
-        - normalise the rt values, first value (start) is 0
-        - normalise the mz values, the average is 0
-        - not sure about the intensities
-        :param peaks: the list of chromatographic peaks to normalise
-        :return: the list of normalised chromatographic peaks
-        """
-        copy_peaks = copy.deepcopy(peaks)
-        for p in copy_peaks:
-            start_rt = np.min(p.rt_values)
-            p.rt_values = p.rt_values - start_rt  # normalise the rt values, first value (start) is 0
-            p.mz_values = p.mz_values - np.mean(p.mz_values)  # normalise the mz values, the mean is 0
-        return copy_peaks
-
-    def _get_chrom_peak(self, groups, pid):
-        """
-        Constructs a Peak object from groups in the dataframe.
-        :param groups: pandas group object, produced from df.groupby('id'), i.e. each group is a set of rows
-        grouped by the 'id' column in the dataframe.
-        :param pid: the peak id
-        :return: an MS1 chromatographic peak object
-        """
-        selected = groups.get_group(pid)
-        mz = self._get_value(selected, 'mz')
-        rt = self._get_value(selected, 'rt')
-        max_intensity = self._get_value(selected, 'maxo')
-        ms_level = self._get_value(selected, 'msLevel')
-        args = {
-            'pid': self._get_value(selected, 'id'),
-            'filename': self._get_value(selected, 'sample_name'),
-            'sample_idx': self._get_value(selected, 'fromFile'),
-            'sn': self._get_value(selected, 'sn'),
-            'integrated_intensity': self._get_value(selected, 'into'),
-            'mz_range': self._get_range(selected, 'mzmin', 'mzmax'),
-            'rt_range': self._get_range(selected, 'rtmin', 'rtmax'),
-            'mz_values': self._get_values(selected, 'mz_values'),
-            'rt_values': self._get_values(selected, 'rt_values'),
-            'intensity_values': self._get_values(selected, 'intensity_values')
-        }
-        # create a new peak using all the parameters above
-        p = ChromatographicPeak(mz, rt, max_intensity, ms_level, **args)
-        return p
-
-    def _get_value(self, df, column_name):
-        return self._get_values(df, column_name)[0]
-
-    def _get_range(self, df, min_column_name, max_column_name):
-        return np.array([self._get_value(df, min_column_name), self._get_value(df, max_column_name)])
-
-    def _get_values(self, df, column_name):
-        return df[column_name].values
-
     def _valid_peak(self, peak):
         ms_level = peak.ms_level
         min_intensity = self.min_ms1_intensity if ms_level == 1 else self.min_ms2_intensity
@@ -235,8 +159,6 @@ class DataSource(object):
         elif peak.rt < self.min_rt:
             return False
         elif peak.rt > self.max_rt:
-            return False
-        elif hasattr(peak, 'sn') and peak.sn is not None and peak.sn < self.min_sn:
             return False
         return True
 
@@ -308,73 +230,21 @@ class PeakDensityEstimator(object):
         return self.kdes[(N_PEAKS, ms_level)].sample(n_sample)
 
 
-# class PeakSampler(object):
-#     """A class to sample peaks from a trained density estimator"""
-#     def __init__(self, density_estimator):
-#         self.density_estimator = density_estimator
-
-#     def sample(self, ms_level, n_peaks=None,ms2_mz_noise_sd=0,ms2_intensity_noise_sd=0):
-#         if n_peaks is None:
-#             n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0],0)
-#         vals = self.density_estimator.sample(ms_level, n_peaks)
-#         mzs = vals[:, 0]
-#         intensities = np.exp(vals[:, 1])
-#         rts = vals[:, 2]
-#         peaks = []
-#         for i in range(n_peaks):
-#             p = NoisyPeak(ms2_mz_noise_sd, ms2_intensity_noise_sd, mzs[i], rts[i], intensities[i], ms_level)
-#             peaks.append(p)
-#         return peaks
-
 class PeakSampler(object):
-    """A class to sample peaks from a trained density estimator, or from a trained density estimator and a list of compounds"""
+    """A class to sample peaks from a trained density estimator"""
 
-    def __init__(self, density_estimator, ms1_mz_source="densities", compound_list=None, transformations_file=None,
-                 transformations_prob=None):
+    def __init__(self, density_estimator):
         self.density_estimator = density_estimator
-        self.ms1_mz_source = ms1_mz_source
-        if ms1_mz_source == "compound_list":
-            self.compound_list = compound_list
-            self.transformations = load_from_file(transformations_file)
-            self.transformations_prob = transformations_prob
 
-    def sample(self, ms_level, n_peaks=None, ms2_mz_noise_sd=0, ms2_intensity_noise_sd=0):
+    def sample(self, ms_level, n_peaks=None):
         if n_peaks is None:
             n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0], 0)
-            if self.ms1_mz_source == "compound_list":
-                n_peaks = min(n_peaks, len(self.compound_list))
         vals = self.density_estimator.sample(ms_level, n_peaks)
+        mzs = vals[:, 0]
         intensities = np.exp(vals[:, 1])
         rts = vals[:, 2]
-        if ms_level == 1 and self.ms1_mz_source == "compound_list":
-            ran = random.sample(range(len(self.compound_list)), n_peaks)
-            mzs = []
-            for i in range(n_peaks):
-                which_transformation = np.random.choice(range(len(self.transformations)), 1, self.transformations_prob)
-                mzs.append(self.transformations[which_transformation[0]].reversetransform(
-                    self.compound_list[i].monisotopic_molecular_weight))
-        else:
-            mzs = vals[:, 0]
         peaks = []
         for i in range(n_peaks):
-            p = NoisyPeak(ms2_mz_noise_sd, ms2_intensity_noise_sd, mzs[i], rts[i], intensities[i], ms_level)
-            peaks.append(p)
-        return peaks
-
-    def sample_n(self, ms_level, n_peaks=None):
-        if n_peaks is None:
-            n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0], 0)
-            if self.ms1_mz_source == "compound_list":
-                n_peaks = min(n_peaks, len(self.compound_list))
-        return (n_peaks)
-
-    def sample_noise_peak(self, ms_level, intensity, intensity_noise, mz_noise, rt_length=None, n_noise_peaks=None):
-        vals = self.density_estimator.sample(ms_level, n_noise_peak)
-        rts = vals[:, 2]
-        intensities = [intensity for i in range(n_noise_peak)]
-        mzs = vals[:, 0]
-        peaks = []
-        for i in range(n_noise_peak):
-            p = NoisyPeak(mz_noise, intensity_noise, mzs[i], rts[i], intensities[i], ms_level)
+            p = PeakSample(mzs[i], rts[i], intensities[i], ms_level)
             peaks.append(p)
         return peaks
