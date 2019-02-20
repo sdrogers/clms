@@ -3,7 +3,8 @@ import scipy
 import numpy as np
 import sys
 import scipy.stats
-from VMSfunctions.Common import chromatogramDensityNormalisation, aductTransformation
+from VMSfunctions.Common import chromatogramDensityNormalisation, adductTransformation
+import re
 
 
 # Compound was just something I wrote to fill with the stuff I extracted from the HMBD database
@@ -81,27 +82,27 @@ class Isotopes(object):
             return None
             # turn this into a proper function
 
-class Aducts(object):
+class Adducts(object):
     def __init__(self, formula):
-        self.aduct_names = ["M+H", "[M+ACN]+H", "[M+CH3OH]+H", "[M+NH3]+H"] # remove eventually
+        self.adduct_names = ["M+H", "[M+ACN]+H", "[M+CH3OH]+H", "[M+NH3]+H"] # remove eventually
         self.formula = formula
         
-    def get_aducts(self):
-        aducts = []
-        proportions = self._get_aduct_proportions()
-        for j in range(len(self.aduct_names)):
+    def get_adducts(self):
+        adducts = []
+        proportions = self._get_adduct_proportions()
+        for j in range(len(self.adduct_names)):
             if proportions[j] != 0:
-                aducts.extend([(self._get_aduct_names()[j], proportions[j])])
-        return aducts
+                adducts.extend([(self._get_adduct_names()[j], proportions[j])])
+        return adducts
     
-    def _get_aduct_proportions(self):
+    def _get_adduct_proportions(self):
         # replace this with something proper
         proportions = np.random.binomial(1,0.1,3) * np.random.uniform(0.1,0.2,3)
         proportions = [1-sum(proportions)] + proportions.tolist()
         return proportions
     
-    def _get_aduct_names(self):
-        return self.aduct_names
+    def _get_adduct_names(self):
+        return self.adduct_names
 
 class Chemical(object):
     
@@ -114,39 +115,40 @@ class Chemical(object):
                 return None
         mz_peaks = []
         for which_isotope in range(len(self.isotopes)):
-            for which_aduct in range(len(self._get_aducts()[which_isotope])):
-                mz_peaks.extend(self._get_mz_peaks(query_rt, ms_level, isolation_windows, which_isotope, which_aduct))
+            for which_adduct in range(len(self._get_adducts())):
+                mz_peaks.extend(self._get_mz_peaks(query_rt, ms_level, isolation_windows, which_isotope, which_adduct))
         if mz_peaks == []:
             return None
         else:
             return mz_peaks
 
-    def _get_mz_peaks(self, query_rt, ms_level, isolation_windows, which_isotope, which_aduct):
+    def _get_mz_peaks(self, query_rt, ms_level, isolation_windows, which_isotope, which_adduct):
         mz_peaks = []
         if ms_level ==1 and self.ms_level == 1:
-            if self._isolation_match(query_rt, isolation_windows[0], which_isotope, which_aduct): # check just first set of windows
-                intensity = self._get_intensity(query_rt, which_isotope, which_aduct)
-                mz = self._get_mz(query_rt, which_isotope, which_aduct)
-                mz_peaks.extend([(mz, intensity)])
+            if not (which_isotope > 0 and which_adduct > 0): # dont give non-mono isotopes adducts
+                if self._isolation_match(query_rt, isolation_windows[0], which_isotope, which_adduct): # check just first set of windows
+                    intensity = self._get_intensity(query_rt, which_isotope, which_adduct)
+                    mz = self._get_mz(query_rt, which_isotope, which_adduct)
+                    mz_peaks.extend([(mz, intensity)])
         elif ms_level > 1 and which_isotope > 0:
             pass
         elif ms_level == self.ms_level:
-            intensity = self._get_intensity(query_rt, which_isotope, which_aduct)
-            mz = self._get_mz(query_rt, which_isotope, which_aduct)
+            intensity = self._get_intensity(query_rt, which_isotope, which_adduct)
+            mz = self._get_mz(query_rt, which_isotope, which_adduct)
             return [(mz, intensity)]
         else:
-            if self._isolation_match(query_rt, isolation_windows[self.ms_level-1], which_isotope, which_aduct) and self.children != None:
+            if self._isolation_match(query_rt, isolation_windows[self.ms_level-1], which_isotope, which_adduct) and self.children != None:
                 for i in range(len(self.children)):
-                    mz_peaks.extend(self.children[i]._get_mz_peaks(query_rt, ms_level, isolation_windows, which_isotope, which_aduct))
+                    mz_peaks.extend(self.children[i]._get_mz_peaks(query_rt, ms_level, isolation_windows, which_isotope, which_adduct))
             else:
                 return []
         return mz_peaks
         
-    def _get_aducts(self):
+    def _get_adducts(self):
         if self.ms_level == 1:
-            return self.aducts
+            return self.adducts
         else:
-            return self.parent._get_aducts()
+            return self.parent._get_adducts()
         
     def _rt_match(self, query_rt):
         if self.ms_level == 1:
@@ -157,24 +159,24 @@ class Chemical(object):
         else:
             True
         
-    def _get_intensity(self, query_rt, which_isotope, which_aduct):
+    def _get_intensity(self, query_rt, which_isotope, which_adduct):
         if self.ms_level == 1:
-            intensity = self.isotopes[which_isotope][1] * self._get_aducts()[which_isotope][which_aduct][1] * self.max_intensity
+            intensity = self.isotopes[which_isotope][1] * self._get_adducts()[which_adduct][1] * self.max_intensity 
             return (intensity * self.chromatogram.get_relative_intensity(query_rt - self.rt))
         else:
-            return (self.parent._get_intensity(query_rt, which_isotope, which_aduct) * self.parent_mass_prop)
+            return (self.parent._get_intensity(query_rt, which_isotope, which_adduct) * self.parent_mass_prop)
 
-    def _get_mz(self, query_rt, which_isotope, which_aduct):
+    def _get_mz(self, query_rt, which_isotope, which_adduct):
         if self.ms_level == 1:
-            return (aductTransformation(self.isotopes[which_isotope][0], self._get_aducts()[which_isotope][which_aduct][0]) + self.chromatogram.get_relative_mz(query_rt - self.rt))
+            return (adductTransformation(self.isotopes[which_isotope][0], self._get_adducts()[which_adduct][0]) + self.chromatogram.get_relative_mz(query_rt - self.rt))
         else:
-            return (aductTransformation(self.isotopes[which_isotope][0], self._get_aducts()[which_isotope][which_aduct][0]))
+            return (adductTransformation(self.isotopes[which_isotope][0], self._get_adducts()[which_adduct][0]))
             
-    def _isolation_match(self, query_rt, isolation_windows, which_isotope, which_aduct):                        
+    def _isolation_match(self, query_rt, isolation_windows, which_isotope, which_adduct):                        
         # assumes list is formated like:
         # [(min_1,max_1),(min_2,max_2),...]
         for window in isolation_windows:
-            if (self._get_mz(query_rt, which_isotope, which_aduct) > window[0] and self._get_mz(query_rt, which_isotope, which_aduct) <= window[1]):
+            if (self._get_mz(query_rt, which_isotope, which_adduct) > window[0] and self._get_mz(query_rt, which_isotope, which_adduct) <= window[1]):
                 return True
         return False
     
@@ -182,10 +184,10 @@ class UnknownChemical(Chemical):
     """
     Chemical from an unknown chemical formula
     """
-    def __init__(self, mz, rt, max_intensity, chromatogram, children):
+    def __init__(self, mz, rt, max_intensity, chromatogram, children = None):
         self.max_intensity = max_intensity
         self.isotopes = [(mz, 1, "Mono")] # [(mz, intensity_proportion, isotope,name)]
-        self.aducts = [[("M+H",1)]]
+        self.adducts = [("M+H",1)]
         self.rt = rt
         self.chromatogram = chromatogram
         self.children = children
@@ -198,10 +200,10 @@ class KnownChemical(Chemical):
     """
     Chemical from an known chemical formula
     """
-    def __init__(self, formula, isotopes, aducts, rt, max_intensity, chromatogram, children):
-        self.formula = formula.formula_string
-        self.isotopes = isotopes.get_isotopes()
-        self.aducts = aducts.get_aducts()
+    def __init__(self, formula, isotopes, adducts, rt, max_intensity, chromatogram, children = None, total_proportion = 0.99):
+        self.formula = formula
+        self.isotopes = isotopes.get_isotopes(total_proportion)
+        self.adducts = adducts.get_adducts()
         self.rt = rt
         self.max_intensity = max_intensity
         self.chromatogram = chromatogram
@@ -209,7 +211,7 @@ class KnownChemical(Chemical):
         self.ms_level = 1
     
     def __repr__(self):
-         return 'KnownChemical - %r' % (self.formula)
+         return 'KnownChemical - %r' % (self.formula.formula_string)
         
 class MSN(Chemical):
     """
@@ -224,7 +226,7 @@ class MSN(Chemical):
         
     def __repr__(self):
          return 'MSN Fragment mz=%.4f ms_level=%d' % (self.isotopes[0][0], self.ms_level)
-
+        
 class Chromatogram(object):
     
     def get_relative_intensity(self, query_rt):
