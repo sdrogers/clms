@@ -50,14 +50,14 @@ def chromatogramDensityNormalisation(rts, intensities):
     new_intensities = [x * (1 / area) for x in intensities]
     return new_intensities
 
-def aductTransformation(mz, aduct):
-    if aduct == "M+H":
+def adductTransformation(mz, adduct):
+    if adduct == "M+H":
         return (mz - 1.007276)
-    elif aduct == "[M+ACN]+H":
+    elif adduct == "[M+ACN]+H":
         return (mz - 42.03383)
-    elif aduct == "[M+CH3OH]+H":
+    elif adduct == "[M+CH3OH]+H":
         return (mz - 33.03349)
-    elif aduct == "[M+NH3]+H":
+    elif adduct == "[M+NH3]+H":
         return (mz - 18.03383)    
     else:
         return None
