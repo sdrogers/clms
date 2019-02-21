@@ -372,68 +372,17 @@ class UnknownColumn(Column):
     """
     Represents a chromatographic column of unknown chemical compounds that go into the LC-MS instruments.
     """
-    def __init__(self, type, num_chemicals, peak_sampler, xcms_output):
+    def __init__(self, type, num_chemicals, peak_sampler, chromatogram_loader):
         super().__init__(type, peak_sampler)
-        print('Loading observed chromatograms')
-        observed_chemicals = self._load_xcms_df(xcms_output)
-        observed_chromatograms = [x.chromatogram for x in observed_chemicals]
 
         # now generates UnknownChemical n-times
+        observed_chromatograms = chromatogram_loader.observed_chromatograms
         for i in range(num_chemicals):
             p = self._sample_peak(1)[0]
             chrom = self._sample_chromatogram(observed_chromatograms)
             chem = UnknownChemical(p.mz, p.rt, p.intensity, chrom, None)
             self.chemicals.append(chem)
             self.chromatograms.append(chrom)
-
-    def _load_xcms_df(self, df_file):
-        """
-        Load CSV file of chromatogram information exported by the XCMS script 'process_data.R'
-        :param df_file: the input csv file exported by the script (in gzip format)
-        :return: a list of Chromatogram objects
-        """
-        df = pd.read_csv(df_file, compression='gzip')
-        peak_ids = df.id.unique()
-        groups = df.groupby('id')
-        chemicals = []
-        for i in range(len(peak_ids)):
-            if i % 5000 == 0:
-                print(i)
-            pid = peak_ids[i]
-            chem = self._get_chemical(groups, pid)
-            if chem is not None:
-                chemicals.append(chem)
-        return chemicals
-
-    def _get_chemical(self, groups, pid):
-        """
-        Constructs an EmpiricalChromarogram object from groups in the dataframe.
-        :param groups: pandas group object, produced from df.groupby('id'), i.e. each group is a set of rows
-        grouped by the 'id' column in the dataframe.
-        :param pid: the peak id
-        :return: an MS1 chromatographic peak object
-        """
-        selected = groups.get_group(pid)
-        mz = self._get_value(selected, 'mz')
-        rt = self._get_value(selected, 'rt')
-        max_intensity = self._get_value(selected, 'maxo')
-        rts = self._get_values(selected, 'rt_values')
-        mzs = self._get_values(selected, 'mz_values')
-        intensities = self._get_values(selected, 'intensity_values')
-        assert len(rts) == len(mzs)
-        assert len(rts) == len(intensities)
-        if len(rts) > 1:
-            chrom = EmpiricalChromatogram(rts, mzs, intensities)
-            chem = UnknownChemical(mz, rt, max_intensity, chrom, None)
-        else:
-            chem = None
-        return chem
-
-    def _get_value(self, df, column_name):
-        return self._get_values(df, column_name)[0]
-
-    def _get_values(self, df, column_name):
-        return df[column_name].values
 
     def _sample_chromatogram(self, observed_chromatograms):
         # TODO: sample a chromatogram for this Chemical. For now, we just choose one randomly
