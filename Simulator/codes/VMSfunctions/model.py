@@ -362,7 +362,7 @@ class KnownColumn(Column):
             max_intensity = p.intensity
             formula = Formula(fs, mz)
             isotopes = Isotopes(formula)
-            adducts = Aducts(formula)
+            adducts = Adducts(formula)
             chrom = FunctionalChromatogram("normal", [0, 1])
             chem = KnownChemical(formula, isotopes, adducts, rt, max_intensity, chrom, None)
             self.chemicals.append(chem)
