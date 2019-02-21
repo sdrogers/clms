@@ -158,8 +158,10 @@ write_df <- function(df, filename) {
 
 ### processing starts here ###
 
-mzml_dir <- 'C:\\Users\\joewa\\Work\\docs\\clms\\FourBeers_mzML_files\\POS\\'
+mzml_dir <- 'C:\\Users\\joewa\\Work\\docs\\clms\\Beers_4Beers_compared\\Positive\\samples\\mzML'
 mzml_files <- dir(mzml_dir, full.names=TRUE)
+filtered_idx = !grepl("desktop.ini", mzml_files) # exclude 'desktop.ini' on windows
+mzml_files <- mzml_files[filtered_idx]
 design <- getDesign(mzml_files, "BEER")
 
 # ppm value is set fairly large.
