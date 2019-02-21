@@ -454,21 +454,28 @@ class MassSpectrometer(object):
 class Scan(object):
     def __init__(self, scan_id, mzs, intensities, ms_level, rt):
         self.scan_id = scan_id
-        self.mzs = mzs
-        self.intensities = intensities
+
+        # ensure that mzs and intensites are sorted by their mz values
+        p = mzs.argsort()
+        self.mzs = mzs[p]
+        self.intensities = intensities[p]
+
         self.ms_level = ms_level
         self.rt = rt
+        assert len(mzs) == len(intensities)
+        self.num_peaks = len(mzs)
 
     def __repr__(self):
-        return 'Scan %d -- num_peaks=%d rt=%.2f ms_level=%d' % (self.scan_id, len(self.mzs), self.rt, self.ms_level)
+        return 'Scan %d -- num_peaks=%d rt=%.2f ms_level=%d' % (self.scan_id, self.num_peaks, self.rt, self.ms_level)
 
 # Independent here refers to how the intensity of each peak in a scan is independent of each other
 # i.e. there's no ion supression effect
 class IndependentMassSpectrometer(MassSpectrometer):
-    def __init__(self, column, scan_intervals, scan_levels):
+    def __init__(self, column, scan_times, scan_levels, isolation_windows):
         self.column = column
-        self.scan_intervals = scan_intervals
+        self.scan_times = scan_times
         self.scan_levels = scan_levels
+        self.isolation_windows = isolation_windows # TODO: isolation windows should be a parameter passed to __next__
         self.chromatograms = column.get_chromatograms()
         self.idx = 0
 
@@ -477,27 +484,40 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
     def __next__ (self):
         try:
-            time = self.scan_intervals[self.idx]
-            level = self.scan_levels[self.idx]
-            if level == 1:
-                scan = self._get_ms1_scan(time)
-            else:
-                raise NotImplementedError()
+            time = self.scan_times[self.idx]
+            ms_level = self.scan_levels[self.idx]
+            if ms_level > 1:
+                raise NotImplementedError() # TODO: add ms2 support
+            scan = self._get_scan(time, ms_level, self.isolation_windows)
         except IndexError:
             raise StopIteration()
         self.idx += 1
         return scan
 
-    def _get_ms1_scan(self, time):
+    def _get_scan(self, scan_time, scan_level, isolation_windows):
         """
         Constructs a scan at a particular timepoint
         :param time: the timepoint
         :return: a mass spectrometry scan at that time
         """
-        # TODO: generates a Scan for a particular timepoint
-        mzs = []
-        intensities = []
-        return Scan(self.idx, mzs, intensities, 1, time)
+        scan_mzs = []  # all the mzs values in this scan
+        scan_intensities = []  # all the intensity values in this scan
+
+        # for all chemicals that come out from the column coupled to the mass spec
+        for i in range(len(self.column.chemicals)):
+            chemical = self.column.chemicals[i]
+
+            # mzs is a list of (mz, intensity) for the different adduct/isotopes combinations of a chemical
+            mzs = chemical.get_all_mz_peaks(scan_time, scan_level, isolation_windows)
+            if mzs is not None:
+                chem_mzs = [x[0] for x in mzs]
+                chem_intensities = [x[1] for x in mzs]
+                scan_mzs.extend(chem_mzs)
+                scan_intensities.extend(chem_intensities)
+
+        scan_mzs = np.array(scan_mzs)
+        scan_intensities = np.array(scan_intensities)
+        return Scan(self.idx, scan_mzs, scan_intensities, scan_level, scan_time)
 
 
 # class ThermoFusionMassSpectrometer:
