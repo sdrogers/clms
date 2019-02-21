@@ -239,12 +239,14 @@ class PeakSampler(object):
     def sample(self, ms_level, n_peaks=None):
         if n_peaks is None:
             n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0], 0)
-        vals = self.density_estimator.sample(ms_level, n_peaks)
-        mzs = vals[:, 0]
-        intensities = np.exp(vals[:, 1])
-        rts = vals[:, 2]
+
         peaks = []
-        for i in range(n_peaks):
-            p = PeakSample(mzs[i], rts[i], intensities[i], ms_level)
-            peaks.append(p)
+        while (len(peaks) < n_peaks):
+            vals = self.density_estimator.sample(ms_level, 1)
+            intensity = np.exp(vals[0, 1])
+            if intensity > 0:
+                mz = vals[0, 0]
+                rt = vals[0, 2]
+                p = PeakSample(mz, rt, intensity, ms_level)
+                peaks.append(p)
         return peaks
