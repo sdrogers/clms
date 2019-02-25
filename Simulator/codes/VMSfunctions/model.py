@@ -161,7 +161,7 @@ class Chemical(object):
         
     def _get_intensity(self, query_rt, which_isotope, which_adduct):
         if self.ms_level == 1:
-            intensity = self.isotopes[which_isotope][1] * self._get_adducts()[which_adduct][1] * self.max_intensity 
+            intensity = self.isotopes[which_isotope][1] * self._get_adducts()[which_adduct][1] * self.max_intensity
             return (intensity * self.chromatogram.get_relative_intensity(query_rt - self.rt))
         else:
             return (self.parent._get_intensity(query_rt, which_isotope, which_adduct) * self.parent_mass_prop)
@@ -247,6 +247,9 @@ class EmpiricalChromatogram(Chromatogram):
         self.rts = [x - min(rts) for x in rts]
         self.mzs = [x - sum(mzs)/len(mzs) for x in mzs] # may want to just set this to 0 and remove from input
         self.intensities = chromatogramDensityNormalisation(rts, intensities)
+        self.raw_rts = rts
+        self.raw_mzs = mzs
+        self.raw_intensities = intensities
 
     def get_relative_intensity(self, query_rt):
         if self._rt_match(query_rt) == False:
