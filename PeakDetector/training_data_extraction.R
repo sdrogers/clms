@@ -37,7 +37,7 @@ get_feature = function(data, row, mzppm=NULL, make_plot=FALSE) {
   sample <- row$sample
   mz_range_df <- row[, c('mzmin', 'mzmax')]
   rt_range_df <- row[, c('rtmin', 'rtmax')]
-
+  
   # TODO: we need to add some padding to the mz_range to get the complete chromatogram, why?!
   # alternatively we can also have a ppm constant for the bounds
   mz = row$mz
@@ -47,11 +47,11 @@ get_feature = function(data, row, mzppm=NULL, make_plot=FALSE) {
     mz_range <- c(mz * (1-mzppm/1e6), mz * (1+mzppm/1e6))
   }
   rt_range <- c(rt_range_df$rtmin, rt_range_df$rtmax)
-
+  
   # below will not give you the mz values of each data point  
   # chr_raw <- chromatogram(data, mz=mz_range, rt=rt_range)
   # chr_raw <- chr_raw[1, sample]
-
+  
   # below is the correct code
   one_file = filterFile(data, sample)
   sample_name = one_file@phenoData@data$sample_name
@@ -61,7 +61,7 @@ get_feature = function(data, row, mzppm=NULL, make_plot=FALSE) {
   if (make_plot) {
     plotMsData(chrom_data)
   }
-
+  
   mz_values = chrom_data$mz
   rt_values = chrom_data$rt
   intensity_values = chrom_data$i
@@ -102,7 +102,7 @@ get_all_features_par <- function(data, filtered_list, N, mzppm=NULL, make_plot=F
   cl<-makeCluster(no_cores)
   registerDoParallel(cl)
   start.time <- Sys.time()
-
+  
   # use biocparallel instead?
   # all_features = bplapply(1:N, function(i, filtered_list, get_feature) {
   #   row <- filtered_list[[i]]
@@ -156,13 +156,12 @@ write_df <- function(df, filename) {
   write.csv(df, file = gzfile(filename), row.names = FALSE)  
 }
 
-### processing starts here ###
+#### end ####
 
-mzml_dir <- 'C:\\Users\\joewa\\Work\\docs\\clms\\Beers_4Beers_compared\\Positive\\samples\\mzML'
+
+mzml_dir <- 'C:\\Users\\Vinny\\work\\beer_data\\POS'
 mzml_files <- dir(mzml_dir, full.names=TRUE)
-filtered_idx = !grepl("desktop.ini", mzml_files) # exclude 'desktop.ini' on windows
-mzml_files <- mzml_files[filtered_idx]
-design <- getDesign(mzml_files, "BEER")
+design <- getDesign(mzml_files[1], "BEER")
 
 # ppm value is set fairly large.
 # Other parameters for peakwidth, snthresh, prefilter for justin's data, taken from 
@@ -178,4 +177,5 @@ make_plot = FALSE
 data <- extract_peaks(mzml_files, design, ppm, peakwidth, snthresh, prefilter, mzdiff)
 ms1_features <- extract_features(data, mzppm, make_plot)
 df = get_df(ms1_features)
-write_df(df, 'beer_ms1_peaks.csv.gz')
+#write_df(df, 'beer_ms1_peaks.csv.gz')
+
