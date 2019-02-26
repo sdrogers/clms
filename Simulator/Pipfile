@@ -9,12 +9,13 @@ pandas = "*"
 scipy = "*"
 ipython = "*"
 matplotlib = "*"
-pythonnet = {version = "*", os_name = "== 'nt'"}
+pythonnet = {version = "*",os_name = "== 'nt'"}
 jupyter = "*"
 pymzml = "*"
 blist = "*"
 sklearn = "*"
 pyyaml = "*"
+events = "*"
 
 [dev-packages]
 
