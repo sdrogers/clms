@@ -277,9 +277,9 @@ class EmpiricalChromatogram(Chromatogram):
         which_rt_above = self.rts.index(self._get_rt_neighbours(query_rt)[1])
         return([which_rt_below, which_rt_above])
         
-    def _get_distance(self, query_rt):
+    def _get_distance(self, query_rt):     
         return((query_rt - self._get_rt_neighbours(query_rt)[0]) / 
-               (self._get_rt_neighbours(query_rt)[0] - self._get_rt_neighbours(query_rt)[1]))
+               (self._get_rt_neighbours(query_rt)[1] - self._get_rt_neighbours(query_rt)[0]))
     
     def _rt_match(self, query_rt):
         if query_rt < min(self.rts) or query_rt > max(self.rts):
