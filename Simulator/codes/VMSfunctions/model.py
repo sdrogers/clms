@@ -1,3 +1,5 @@
+import time
+
 import pandas as pd
 import scipy
 import numpy as np
@@ -6,6 +8,7 @@ import scipy.stats
 from VMSfunctions.Common import chromatogramDensityNormalisation, adductTransformation
 import re
 from events import Events
+import pylab as plt
 
 
 
@@ -436,7 +439,6 @@ class MassSpectrometer(object):
             self.ACQUISITION_STREAM_OPENING: self.events.AcquisitionStreamOpening,
             self.ACQUISITION_STREAM_CLOSING: self.events.AcquisitionStreamClosing
         }
-        self.scans = []
 
     def get_next_scan(self):
         raise NotImplementedError()
@@ -462,23 +464,30 @@ class MassSpectrometer(object):
 # Independent here refers to how the intensity of each peak in a scan is independent of each other
 # i.e. there's no ion supression effect
 class IndependentMassSpectrometer(MassSpectrometer):
-    def __init__(self, column):
+    def __init__(self, column, scan_parameters):
         super().__init__()
         self.column = column
         self.idx = 0
         self.time = 0
+        self.scan_parameters = scan_parameters
+
+    def run(self, max_time):
+        self.fire_event(MassSpectrometer.ACQUISITION_STREAM_OPENING)
+        try:
+            while self.time < max_time:
+                scan = self.get_next_scan(self.scan_parameters)
+                # time.sleep(scan.scan_duration)
+                self.fire_event(self.MS_SCAN_ARRIVED, scan)
+        finally:
+            self.fire_event(MassSpectrometer.ACQUISITION_STREAM_CLOSING)
 
     def get_next_scan(self, scan_parameters):
-        try:
-            ms_level = scan_parameters['ms_level']
-            isolation_windows = scan_parameters['isolation_windows']
-            scan = self._get_scan(self.time, ms_level, isolation_windows)
-            self.idx += 1
-            self.time += scan.scan_duration
-            self.fire_event(self.MS_SCAN_ARRIVED, scan)
-            return scan
-        except IndexError:
-            return None
+        ms_level = scan_parameters['ms_level']
+        isolation_windows = scan_parameters['isolation_windows']
+        scan = self._get_scan(self.time, ms_level, isolation_windows)
+        self.idx += 1
+        self.time += scan.scan_duration
+        return scan
 
     def _get_scan(self, scan_time, scan_level, isolation_windows):
         """
@@ -486,30 +495,88 @@ class IndependentMassSpectrometer(MassSpectrometer):
         :param time: the timepoint
         :return: a mass spectrometry scan at that time
         """
-        self.fire_event(self.ACQUISITION_STREAM_OPENING)
-        try:
-            if scan_level > 1:
-                raise NotImplementedError()  # TODO: add ms2 support
-            scan_mzs = []  # all the mzs values in this scan
-            scan_intensities = []  # all the intensity values in this scan
+        if scan_level > 1:
+            raise NotImplementedError()  # TODO: add ms2 support
+        scan_mzs = []  # all the mzs values in this scan
+        scan_intensities = []  # all the intensity values in this scan
 
-            # for all chemicals that come out from the column coupled to the mass spec
-            for i in range(len(self.column.chemicals)):
-                chemical = self.column.chemicals[i]
+        # for all chemicals that come out from the column coupled to the mass spec
+        for i in range(len(self.column.chemicals)):
+            chemical = self.column.chemicals[i]
 
-                # mzs is a list of (mz, intensity) for the different adduct/isotopes combinations of a chemical
-                mzs = chemical.get_all_mz_peaks(scan_time, scan_level, isolation_windows)
-                if mzs is not None:
-                    chem_mzs = [x[0] for x in mzs]
-                    chem_intensities = [x[1] for x in mzs]
-                    scan_mzs.extend(chem_mzs)
-                    scan_intensities.extend(chem_intensities)
+            # mzs is a list of (mz, intensity) for the different adduct/isotopes combinations of a chemical
+            mzs = chemical.get_all_mz_peaks(scan_time, scan_level, isolation_windows)
+            if mzs is not None:
+                chem_mzs = [x[0] for x in mzs]
+                chem_intensities = [x[1] for x in mzs]
+                scan_mzs.extend(chem_mzs)
+                scan_intensities.extend(chem_intensities)
 
-            scan_mzs = np.array(scan_mzs)
-            scan_intensities = np.array(scan_intensities)
-            return Scan(self.idx, scan_mzs, scan_intensities, scan_level, scan_time)
-        finally:
-            self.fire_event(self.ACQUISITION_STREAM_CLOSING)
+        scan_mzs = np.array(scan_mzs)
+        scan_intensities = np.array(scan_intensities)
+        return Scan(self.idx, scan_mzs, scan_intensities, scan_level, scan_time)
+
+class Controller(object):
+    def __init__(self, column):
+        self.scans = []
+        self.column = column
+
+    def handle_scan(self, scan):
+        raise NotImplementedError()
+
+    def handle_acquisition_open(self):
+        raise NotImplementedError()
+
+    def handle_acquisition_closing(self):
+        raise NotImplementedError()
+
+    def update_parameters(self):
+        raise NotImplementedError()
+
+
+class SimpleMs1Controller(Controller):
+    def __init__(self, column):
+        super().__init__(column)
+        self.scan_parameters = {
+            'isolation_windows': [[(0, 1e3)]],  # TODO: change to dictionary?
+            'ms_level': 1
+        }
+
+    def run(self, max_time):
+        mass_spec = IndependentMassSpectrometer(self.column, self.scan_parameters)
+        mass_spec.register(MassSpectrometer.MS_SCAN_ARRIVED, self.handle_scan)
+        mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_OPENING, self.handle_acquisition_open)
+        mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_CLOSING, self.handle_acquisition_closing)
+        mass_spec.run(max_time)
+
+    def handle_scan(self, scan):
+        self.scans.append(scan)
+        if scan.num_peaks > 25:
+            self._plot_scan(scan)
+            for mz, intensity in zip(scan.mzs, scan.intensities):
+                print(mz, intensity)
+        self.update_parameters()
+
+    def handle_acquisition_open(self):
+        print('Acquisition open')
+
+    def handle_acquisition_closing(self):
+        print('Acquisition closing')
+
+    def update_parameters(self):
+        pass # do nothing
+
+    def _plot_scan(self, scan):
+        plt.figure()
+        for i in range(scan.num_peaks):
+            x1 = scan.mzs[i]
+            x2 = scan.mzs[i]
+            y1 = 0
+            y2 = scan.intensities[i]
+            a = [[x1, y1], [x2, y2]]
+            plt.plot(*zip(*a), marker='', color='r', ls='-', lw=1)
+        plt.title('Scan {0} {1}s -- {2} peaks'.format(scan.scan_id, scan.rt, scan.num_peaks))
+        plt.show()
 
 # class ThermoFusionMassSpectrometer:
 
