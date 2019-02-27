@@ -70,29 +70,37 @@ class MassSpectrometer(object):
 # Independent here refers to how the intensity of each peak in a scan is independent of each other
 # i.e. there's no ion supression effect
 class IndependentMassSpectrometer(MassSpectrometer):
-    def __init__(self, chemicals, scan_parameters):
+    def __init__(self, chemicals, default_scan_parameters):
         super().__init__()
         self.chemicals = chemicals
         self.idx = 0
         self.time = 0
-        self.scan_parameters = scan_parameters
+        self.queue = []
+        self.default_scan_parameters = default_scan_parameters
 
     def run(self, max_time):
         self.fire_event(MassSpectrometer.ACQUISITION_STREAM_OPENING)
         try:
             while self.time < max_time:
-                scan = self.get_next_scan(self.scan_parameters)
+                if len(self.queue) == 0:
+                    param = self.default_scan_parameters
+                else:
+                    param = self.queue.pop(0)
+                scan = self.get_next_scan(param)
                 self.fire_event(self.MS_SCAN_ARRIVED, scan)
         finally:
             self.fire_event(MassSpectrometer.ACQUISITION_STREAM_CLOSING)
 
-    def get_next_scan(self, scan_parameters):
-        ms_level = scan_parameters['ms_level']
-        isolation_windows = scan_parameters['isolation_windows']
+    def get_next_scan(self, param):
+        ms_level = param['ms_level']
+        isolation_windows = param['isolation_windows']
         scan = self._get_scan(self.time, ms_level, isolation_windows)
         self.idx += 1
         self.time += scan.scan_duration
         return scan
+
+    def add_to_queue(self, param):
+        self.queue.append(param)
 
     def _get_scan(self, scan_time, scan_level, isolation_windows):
         """
@@ -100,8 +108,6 @@ class IndependentMassSpectrometer(MassSpectrometer):
         :param time: the timepoint
         :return: a mass spectrometry scan at that time
         """
-        if scan_level > 1:
-            raise NotImplementedError()  # TODO: add ms2 support
         scan_mzs = []  # all the mzs values in this scan
         scan_intensities = []  # all the intensity values in this scan
 
@@ -123,9 +129,9 @@ class IndependentMassSpectrometer(MassSpectrometer):
         return Scan(self.idx, scan_mzs, scan_intensities, scan_level, scan_time)
 
     def _get_all_mz_peaks(self, chemical, query_rt, ms_level, isolation_windows):
-        if ms_level == 1:
-            if not self._rt_match(chemical, query_rt):
-                return None
+
+        if not self._rt_match(chemical, query_rt):
+            return None
         mz_peaks = []
         for which_isotope in range(len(chemical.isotopes)):
             for which_adduct in range(len(self._get_adducts(chemical))):

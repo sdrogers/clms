@@ -142,8 +142,8 @@ class Chemical(object):
             mz = self._get_mz(query_rt, which_isotope, which_adduct)
             return [(mz, intensity)]
         else:
-            if self._isolation_match(query_rt, isolation_windows[self.ms_level - 1], which_isotope,
-                                     which_adduct) and self.children != None:
+            if self._isolation_match(query_rt, isolation_windows[self.ms_level - 1], which_isotope, which_adduct)\
+                    and self.children != None:
                 for i in range(len(self.children)):
                     mz_peaks.extend(self.children[i]._get_mz_peaks(query_rt, ms_level, isolation_windows, which_isotope,
                                                                    which_adduct))

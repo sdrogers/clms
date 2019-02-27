@@ -202,7 +202,7 @@ class Dia_Methods_Subsample(object):
 
 class Kaufmann_Windows(object):
     """
-    Method for creating window desigs based on Kaufmann paper - https://www.ncbi.nlm.nih.gov/pubmed/27188447 
+    Method for creating window designs based on Kaufmann paper - https://www.ncbi.nlm.nih.gov/pubmed/27188447 
     """
 
     def __init__(self, bin_walls, bin_walls_extra, kaufmann_design, extra_bins=0):
