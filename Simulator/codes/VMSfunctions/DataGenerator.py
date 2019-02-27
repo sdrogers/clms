@@ -9,7 +9,6 @@ import pylab as plt
 import pymzml
 from sklearn.neighbors import KernelDensity
 
-from VMSfunctions.model import EmpiricalChromatogram, UnknownChemical
 from .Common import MZ, RT, INTENSITY, N_PEAKS, MZ_INTENSITY
 
 
