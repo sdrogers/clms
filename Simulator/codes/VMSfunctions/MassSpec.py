@@ -111,7 +111,8 @@ class IndependentMassSpectrometer(MassSpectrometer):
             chemical = self.chemicals[i]
 
             # mzs is a list of (mz, intensity) for the different adduct/isotopes combinations of a chemical
-            mzs = chemical.get_all_mz_peaks(scan_time, scan_level, isolation_windows)
+            mzs = self._get_all_mz_peaks(chemical, scan_time, scan_level, isolation_windows)
+
             if mzs is not None:
                 chem_mzs = [x[0] for x in mzs]
                 chem_intensities = [x[1] for x in mzs]
@@ -121,6 +122,83 @@ class IndependentMassSpectrometer(MassSpectrometer):
         scan_mzs = np.array(scan_mzs)
         scan_intensities = np.array(scan_intensities)
         return Scan(self.idx, scan_mzs, scan_intensities, scan_level, scan_time)
+
+    def _get_all_mz_peaks(self, chemical, query_rt, ms_level, isolation_windows):
+        if ms_level == 1:
+            if not self._rt_match(chemical, query_rt):
+                return None
+        mz_peaks = []
+        for which_isotope in range(len(chemical.isotopes)):
+            for which_adduct in range(len(self._get_adducts(chemical))):
+                mz_peaks.extend(self._get_mz_peaks(chemical, query_rt, ms_level, isolation_windows, which_isotope, which_adduct))
+        if mz_peaks == []:
+            return None
+        else:
+            return mz_peaks
+
+    def _get_mz_peaks(self, chemical, query_rt, ms_level, isolation_windows, which_isotope, which_adduct):
+        mz_peaks = []
+        if ms_level == 1 and chemical.ms_level == 1:
+            if not (which_isotope > 0 and which_adduct > 0):
+                if self._isolation_match(chemical, query_rt, isolation_windows[0], which_isotope, which_adduct):
+                    intensity = self._get_intensity(chemical, query_rt, which_isotope, which_adduct)
+                    mz = self._get_mz(chemical, query_rt, which_isotope, which_adduct)
+                    mz_peaks.extend([(mz, intensity)])
+        elif ms_level > 1 and which_isotope > 0:
+            pass
+        elif ms_level == chemical.ms_level:
+            intensity = self._get_intensity(chemical, query_rt, which_isotope, which_adduct)
+            mz = self._get_mz(chemical, query_rt, which_isotope, which_adduct)
+            return [(mz, intensity)]
+        else:
+            if self._isolation_match(chemical, query_rt, isolation_windows[chemical.ms_level - 1], which_isotope,
+                                     which_adduct) and chemical.children is not None:
+                for i in range(len(chemical.children)):
+                    mz_peaks.extend(self._get_mz_peaks(chemical.children[i], query_rt, ms_level, isolation_windows,
+                                                       which_isotope, which_adduct))
+            else:
+                return []
+        return mz_peaks
+
+    def _get_adducts(self, chemical):
+        if chemical.ms_level == 1:
+            return chemical.adducts
+        else:
+            return self._get_adducts(chemical.parent)
+
+    def _rt_match(self, chemical, query_rt):
+        if chemical.ms_level == 1:
+            if chemical.chromatogram._rt_match(query_rt - chemical.rt):
+                return True
+            else:
+                return False
+        else:
+            True
+
+    def _get_intensity(self, chemical, query_rt, which_isotope, which_adduct):
+        if chemical.ms_level == 1:
+            intensity = chemical.isotopes[which_isotope][1] * self._get_adducts(chemical)[which_adduct][1] * \
+                        chemical.max_intensity
+            return intensity * chemical.chromatogram.get_relative_intensity(query_rt - chemical.rt)
+        else:
+            return self._get_intensity(chemical.parent, query_rt, which_isotope, which_adduct) * \
+                   chemical.parent_mass_prop
+
+    def _get_mz(self, chemical, query_rt, which_isotope, which_adduct):
+        if chemical.ms_level == 1:
+            return (adductTransformation(chemical.isotopes[which_isotope][0],
+                                         self._get_adducts(chemical)[which_adduct][0]) +
+                    chemical.chromatogram.get_relative_mz(query_rt - chemical.rt))
+        else:
+            return adductTransformation(chemical.isotopes[which_isotope][0], self._get_adducts(chemical)[which_adduct][0])
+
+    def _isolation_match(self, chemical, query_rt, isolation_windows, which_isotope, which_adduct):
+        # assumes list is formated like:
+        # [(min_1,max_1),(min_2,max_2),...]
+        for window in isolation_windows:
+            if window[0] < self._get_mz(chemical, query_rt, which_isotope, which_adduct) <= window[1]:
+                return True
+        return False
 
 # class ThermoFusionMassSpectrometer:
 
