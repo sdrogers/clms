@@ -4,9 +4,10 @@ from VMSfunctions.MassSpec import *
 
 
 class Controller(object):
-    def __init__(self, chemicals):
+    def __init__(self, chemicals, mass_spec):
         self.scans = []
         self.chemicals = chemicals
+        self.mass_spec = mass_spec
 
     def handle_scan(self, scan):
         raise NotImplementedError()
@@ -22,23 +23,23 @@ class Controller(object):
 
 
 class SimpleMs1Controller(Controller):
-    def __init__(self, chemicals):
-        super().__init__(chemicals)
+    def __init__(self, chemicals, mass_spec, plot_peaks=25):
+        super().__init__(chemicals, mass_spec)
         self.scan_parameters = {
             'isolation_windows': [[(0, 1e3)]],  # TODO: change to dictionary?
             'ms_level': 1
         }
-
-    def run(self, max_time):
-        mass_spec = IndependentMassSpectrometer(self.chemicals, self.scan_parameters)
+        self.plot_peaks = plot_peaks
         mass_spec.register(MassSpectrometer.MS_SCAN_ARRIVED, self.handle_scan)
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_OPENING, self.handle_acquisition_open)
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_CLOSING, self.handle_acquisition_closing)
-        mass_spec.run(max_time)
+
+    def run(self, max_time):
+        self.mass_spec.run(max_time)
 
     def handle_scan(self, scan):
         self.scans.append(scan)
-        if scan.num_peaks > 25:
+        if scan.num_peaks > self.plot_peaks:
             self._plot_scan(scan)
             for mz, intensity in zip(scan.mzs, scan.intensities):
                 print(mz, intensity)

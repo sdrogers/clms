@@ -82,7 +82,6 @@ class IndependentMassSpectrometer(MassSpectrometer):
         try:
             while self.time < max_time:
                 scan = self.get_next_scan(self.scan_parameters)
-                # time.sleep(scan.scan_duration)
                 self.fire_event(self.MS_SCAN_ARRIVED, scan)
         finally:
             self.fire_event(MassSpectrometer.ACQUISITION_STREAM_CLOSING)
