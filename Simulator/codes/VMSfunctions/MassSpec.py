@@ -1,3 +1,5 @@
+import copy
+
 from events import Events
 
 from VMSfunctions.Chemicals import *
@@ -30,6 +32,23 @@ class Scan(object):
 
     def __repr__(self):
         return 'Scan %d -- num_peaks=%d rt=%.2f ms_level=%d' % (self.scan_id, self.num_peaks, self.rt, self.ms_level)
+
+
+class ScanParameters(object):
+    MS_LEVEL = 'ms_level'
+    ISOLATION_WINDOWS = 'isolation_windows'
+
+    def __init__(self):
+        self.params = {}
+
+    def set(self, key, value):
+        self.params[key] = value
+
+    def get(self, key):
+        return self.params[key]
+
+    def deepcopy(self):
+        return copy.deepcopy(self)
 
 
 class MassSpectrometer(object):
@@ -70,39 +89,46 @@ class MassSpectrometer(object):
 # Independent here refers to how the intensity of each peak in a scan is independent of each other
 # i.e. there's no ion supression effect
 class IndependentMassSpectrometer(MassSpectrometer):
-    def __init__(self, chemicals, default_scan_parameters):
+    def __init__(self, chemicals):
         super().__init__()
         self.chemicals = chemicals
         self.idx = 0
         self.time = 0
         self.queue = []
-        self.default_scan_parameters = default_scan_parameters
+        self.repeating_scan_parameters = None
 
     def run(self, max_time):
         self.fire_event(MassSpectrometer.ACQUISITION_STREAM_OPENING)
         try:
             while self.time < max_time:
                 if len(self.queue) == 0:
-                    param = self.default_scan_parameters
+                    param = self.repeating_scan_parameters
                 else:
                     param = self.queue.pop(0)
                 scan = self.get_next_scan(param)
-                self.fire_event(self.MS_SCAN_ARRIVED, scan)
         finally:
             self.fire_event(MassSpectrometer.ACQUISITION_STREAM_CLOSING)
 
     def get_next_scan(self, param):
-        ms_level = param['ms_level']
-        isolation_windows = param['isolation_windows']
-        scan = self._get_scan(self.time, ms_level, isolation_windows)
-        self.idx += 1
-        self.time += scan.scan_duration
-        return scan
+        if param is not None:
+            scan = self._get_scan(self.time, param)
+            self.fire_event(self.MS_SCAN_ARRIVED, scan)
+            self.idx += 1
+            self.time += scan.scan_duration
+            return scan
+        else:
+            return None
 
     def add_to_queue(self, param):
         self.queue.append(param)
 
-    def _get_scan(self, scan_time, scan_level, isolation_windows):
+    def disable_repeating_scan(self):
+        self.set_repeating_scan(None)
+
+    def set_repeating_scan(self, params):
+        self.repeating_scan_parameters = params
+
+    def _get_scan(self, scan_time, param):
         """
         Constructs a scan at a particular timepoint
         :param time: the timepoint
@@ -110,13 +136,15 @@ class IndependentMassSpectrometer(MassSpectrometer):
         """
         scan_mzs = []  # all the mzs values in this scan
         scan_intensities = []  # all the intensity values in this scan
+        ms_level = param.get(ScanParameters.MS_LEVEL)
+        isolation_windows = param.get(ScanParameters.ISOLATION_WINDOWS)
 
         # for all chemicals that come out from the column coupled to the mass spec
         for i in range(len(self.chemicals)):
             chemical = self.chemicals[i]
 
             # mzs is a list of (mz, intensity) for the different adduct/isotopes combinations of a chemical
-            mzs = self._get_all_mz_peaks(chemical, scan_time, scan_level, isolation_windows)
+            mzs = self._get_all_mz_peaks(chemical, scan_time, ms_level, isolation_windows)
 
             if mzs is not None:
                 chem_mzs = [x[0] for x in mzs]
@@ -126,7 +154,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
         scan_mzs = np.array(scan_mzs)
         scan_intensities = np.array(scan_intensities)
-        return Scan(self.idx, scan_mzs, scan_intensities, scan_level, scan_time)
+        return Scan(self.idx, scan_mzs, scan_intensities, ms_level, scan_time)
 
     def _get_all_mz_peaks(self, chemical, query_rt, ms_level, isolation_windows):
 
