@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 import pylab as plt
 
@@ -68,12 +68,17 @@ class SimpleMs1Controller(Controller):
         pass # do nothing
 
 
+ExclusionItem = namedtuple('ExclusionItem', 'from_mz to_mz from_rt to_rt')
+
+
 class TopNController(Controller):
-    def __init__(self, chemicals, mass_spec, N, mz_tol):
+    def __init__(self, chemicals, mass_spec, N, mz_tol, rt_tol, exclusion_list=[]):
         super().__init__(chemicals, mass_spec)
         self.last_ms1_scan = None
         self.N = N
-        self.mz_tol = mz_tol
+        self.mz_tol = mz_tol # the m/z window around a precursor ion to be fragmented
+        self.rt_tol = rt_tol # the rt window to prevent the same precursor ion to be fragmented again
+        self.exclusion_list = exclusion_list # a list of ExclusionItem
 
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
@@ -117,13 +122,19 @@ class TopNController(Controller):
         # if there's a previous ms1 scan to process
         if self.last_ms1_scan is not None:
 
+            rt = self.last_ms1_scan.rt
+
             # then get the last ms1 scan and select its top-N precursor ions
             intensities = self.last_ms1_scan.intensities
             largest_indices = intensities.argsort()[-self.N:][::-1]
             largest_mzs = self.last_ms1_scan.mzs[largest_indices]
 
             for i in range(len(largest_mzs)): # define isolation window around the selected precursor ions
+
                 mz = largest_mzs[i]
+                if self._exclude(mz, rt, self.exclusion_list):
+                    continue
+
                 mz_lower = mz * (1 - self.mz_tol / 1e6)
                 mz_upper = mz * (1 + self.mz_tol / 1e6)
                 isolation_windows = [[(mz_lower, mz_upper)]]
@@ -132,10 +143,31 @@ class TopNController(Controller):
                 dda_scan_params.set(ScanParameters.MS_LEVEL, 2)
                 dda_scan_params.set(ScanParameters.ISOLATION_WINDOWS, isolation_windows)
                 self.mass_spec.add_to_queue(dda_scan_params) # push this dda scan to the mass spec queue
+
+                # dynamic exclusion: prevent the same precursor ion being fragmented multiple times in the same windows
+                rt_lower = rt - self.rt_tol
+                rt_upper = rt + self.rt_tol
+                x = ExclusionItem(from_mz=mz_lower, to_mz=mz_upper, from_rt=rt_lower, to_rt=rt_upper)
+                self.exclusion_list.append(x)
+
             print()
 
             # set this ms1 scan as has been processed
             self.last_ms1_scan = None
+
+            # remove expired items from exclusion list
+            self.exclusion_list = list(filter(lambda x: x.to_rt > rt, self.exclusion_list))
+
+
+    def _exclude(self, mz, rt, exclusion_list): # TODO: make this faster?
+        for x in exclusion_list:
+            exclude_mz = x.from_mz < mz < x.to_mz
+            exclude_rt = x.from_rt < rt < x.to_rt
+            if exclude_mz and exclude_rt:
+                print('Excluded precursor ion', mz, rt, x)
+                return True
+        return False
+
 
 # class Controller:
 
