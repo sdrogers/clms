@@ -72,13 +72,14 @@ ExclusionItem = namedtuple('ExclusionItem', 'from_mz to_mz from_rt to_rt')
 
 
 class TopNController(Controller):
-    def __init__(self, chemicals, mass_spec, N, mz_tol, rt_tol, exclusion_list=[]):
+    def __init__(self, chemicals, mass_spec, N, mz_tol, rt_tol, exclusion_list=[], min_ms2_intensity=0):
         super().__init__(chemicals, mass_spec)
         self.last_ms1_scan = None
         self.N = N
         self.mz_tol = mz_tol # the m/z window around a precursor ion to be fragmented
         self.rt_tol = rt_tol # the rt window to prevent the same precursor ion to be fragmented again
         self.exclusion_list = exclusion_list # a list of ExclusionItem
+        self.min_ms2_intensity = min_ms2_intensity
 
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
@@ -94,16 +95,17 @@ class TopNController(Controller):
 
     def handle_scan(self, scan):
         super().handle_scan(scan)
-        if scan.num_peaks > 0:
-            print(scan)
 
-            if scan.ms_level == 1: # if we get a non-empty ms1 scan
-                if scan.num_peaks > 0:
-                    self.last_ms1_scan = scan
-                else:
-                    self.last_ms1_scan = None
+        if scan.ms_level == 1: # if we get a non-empty ms1 scan
+            if scan.num_peaks > 0:
+                print(scan)
+                self.last_ms1_scan = scan
+            else:
+                self.last_ms1_scan = None
 
-            elif scan.ms_level == 2: # if we get ms2 scan, then just show it
+        elif scan.ms_level == 2: # if we get ms2 scan, then do something with it
+            scan.filter_intensity(self.min_ms2_intensity)
+            if scan.num_peaks > 0:
                 self._plot_scan(scan)
                 for mz, intensity in zip(scan.mzs, scan.intensities):
                     print(mz, intensity)

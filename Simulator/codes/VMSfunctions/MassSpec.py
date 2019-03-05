@@ -26,6 +26,12 @@ class Scan(object):
         self.num_peaks = len(mzs)
         self.scan_duration = self._get_scan_duration()
 
+    def filter_intensity(self, min_intensity):
+        keep = self.intensities > min_intensity
+        self.mzs = self.mzs[keep]
+        self.intensities = self.intensities[keep]
+        self.num_peaks = len(self.mzs)
+
     def _get_scan_duration(self):
         # TODO: improve this
         return 1
