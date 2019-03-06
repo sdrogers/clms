@@ -16,6 +16,8 @@ blist = "*"
 sklearn = "*"
 pyyaml = "*"
 events = "*"
+psims = "*"
+tornado = "==5.1.1"
 
 [dev-packages]
 

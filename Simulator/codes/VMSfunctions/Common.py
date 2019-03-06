@@ -7,7 +7,8 @@ INTENSITY = 'intensity'
 MZ_INTENSITY = MZ + '_' + INTENSITY
 RT = 'rt'
 N_PEAKS = 'n_peaks'
-
+POSITIVE = 'positive'
+NEGATIVE = 'negative'
 
 def save_obj(obj, filename, use_joblib=True):
     """

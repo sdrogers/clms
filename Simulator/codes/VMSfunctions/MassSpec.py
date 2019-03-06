@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import copy
 
 from events import Events
@@ -43,6 +45,7 @@ class Scan(object):
 class ScanParameters(object):
     MS_LEVEL = 'ms_level'
     ISOLATION_WINDOWS = 'isolation_windows'
+    PRECURSOR = 'precursor'
 
     def __init__(self):
         self.params = {}
@@ -51,7 +54,10 @@ class ScanParameters(object):
         self.params[key] = value
 
     def get(self, key):
-        return self.params[key]
+        if key in self.params:
+            return self.params[key]
+        else:
+            return None
 
     def deepcopy(self):
         return copy.deepcopy(self)
@@ -62,7 +68,9 @@ class MassSpectrometer(object):
     ACQUISITION_STREAM_OPENING = 'AcquisitionStreamOpening'
     ACQUISITION_STREAM_CLOSING = 'AcquisitionStreamClosing'
 
-    def __init__(self):
+    def __init__(self, ionisation_mode):
+        self.ionisation_mode = ionisation_mode
+
         # following IAPI events
         self.events =  Events((self.MS_SCAN_ARRIVED, self.ACQUISITION_STREAM_OPENING, self.ACQUISITION_STREAM_CLOSING,))
         self.event_dict = {
@@ -95,23 +103,33 @@ class MassSpectrometer(object):
 # Independent here refers to how the intensity of each peak in a scan is independent of each other
 # i.e. there's no ion supression effect
 class IndependentMassSpectrometer(MassSpectrometer):
-    def __init__(self, chemicals):
-        super().__init__()
+    def __init__(self, ionisation_mode, chemicals):
+        super().__init__(ionisation_mode)
         self.chemicals = chemicals
         self.idx = 0
         self.time = 0
         self.queue = []
         self.repeating_scan_parameters = None
+        self.precursor_information = defaultdict(list) # key: Precursor object, value: ms2 scans
 
     def run(self, max_time):
         self.fire_event(MassSpectrometer.ACQUISITION_STREAM_OPENING)
         try:
             while self.time < max_time:
+
+                # if the processing queue is empty, then just do the repeating scan
                 if len(self.queue) == 0:
                     param = self.repeating_scan_parameters
                 else:
+                    # otherwise pop the parameter for the next scan from the queue
                     param = self.queue.pop(0)
                 scan = self.get_next_scan(param)
+
+                # if MS2 and above, and the controller tells us which precursor ion the scan is coming from, store it
+                precursor = param.get(ScanParameters.PRECURSOR)
+                if scan.ms_level >= 2 and precursor is not None:
+                    self.precursor_information[precursor].append(scan)
+
         finally:
             self.fire_event(MassSpectrometer.ACQUISITION_STREAM_CLOSING)
 
