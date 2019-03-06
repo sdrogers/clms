@@ -20,28 +20,47 @@ class Compound(object):
 
 
 class Formula(object):
-    def __init__(self, formula_string, mz):
+    def __init__(self, formula_string):
         self.formula_string = formula_string
-        self.mz = mz  # TODO: calculate this later from the formula_string
+        self.atom_names = ['C', 'H', 'N', 'O', 'P', 'S', 'Cl', 'I', 'Br', 'Si', 'F', 'D']
+        self.atoms = {}
+        for atom in self.atom_names:
+            self.atoms[atom] = self._get_n_element(atom)
 
     def _get_mz(self):
-        return self.mz
+        return self.compute_exact_mass()
 
-    def _get_n_element(self, element):
-        if self.formula_string == element:
-            return 1
-        split_formula = self.formula_string.split(element)
-        if (len(split_formula) == 1):
+    def _get_n_element(self, atom_name):
+        # Do some regex matching to find the numbers of the important atoms
+        ex = atom_name + '(?![a-z])' + '\d*'
+        m = re.search(ex, self.formula_string)
+        if m == None:
             return 0
-        for i in range(len(split_formula)):
-            if split_formula[i + 1][0].isdigit():
-                return float(re.split('[A-Z]+', split_formula[i + 1])[0])
-            else:
-                if split_formula[i + 1][0].islower():
-                    pass
+        else:
+            ex = atom_name + '(?![a-z])' + '(\d*)'
+            m2 = re.findall(ex, self.formula_string)
+            total = 0
+            for a in m2:
+                if len(a) == 0:
+                    total += 1
                 else:
-                    return 1
-        return 0
+                    total += int(a)
+            return total
+
+    def compute_exact_mass(self):
+        masses = {'C': 12.00000000000, 'H': 1.00782503214, 'O': 15.99491462210, 'N': 14.00307400524,
+                  'P': 30.97376151200, 'S': 31.97207069000, 'Cl': 34.96885271000, 'I': 126.904468, 'Br': 78.9183376,
+                  'Si': 27.9769265327, 'F': 18.99840320500, 'D': 2.01410177800}
+        exact_mass = 0.0
+        for a in self.atoms:
+            exact_mass += masses[a] * self.atoms[a]
+        return exact_mass
+
+    def __repr__(self):
+        return self.formula_string
+
+    def __str__(self):
+        return self.formula_string
 
 
 class Isotopes(object):
@@ -324,11 +343,10 @@ class ChemicalCreator(object):
             return self._get_unknown_msn(ms_level, chromatogram, sampled_peak)
 
     def _get_known_ms1(self, formula, chromatogram, sampled_peak):
-        # eventually get rid of mz here
         mz = self._get_mz(1, chromatogram, sampled_peak)
         rt = self._get_rt(chromatogram, sampled_peak)
         intensity = self.get_intensity(chromatogram, sampled_peak)
-        formula = Formula(formula, mz)
+        formula = Formula(formula)
         isotopes = Isotopes(formula)
         adducts = Adducts(formula)
         chrom = None  # TODO: fix this
