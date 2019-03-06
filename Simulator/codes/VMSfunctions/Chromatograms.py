@@ -192,7 +192,7 @@ class ChromatogramLoader(object):
         print('Loaded %d UnknownChemicals/Chromatograms' % len(chemicals))
         return chemicals
 
-    def sample(self):
+    def sample(self): # TODO: add filters here
         if self.chromatograms != None:
             selected = np.random.choice(len(self.chromatograms), 1)[0]
             return self.chromatograms[selected]
