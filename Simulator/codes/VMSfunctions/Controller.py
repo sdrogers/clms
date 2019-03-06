@@ -182,6 +182,23 @@ class TopNController(Controller):
             # add default controlled vocabularies
             out.controlled_vocabularies()
 
+            # TODO: correctly set these fields
+            out.file_description(
+                file_contents={
+                    'MSn spectrum': '',
+                    'centroid spectrum': ''
+                },
+                source_files=[]
+            )
+            out.data_processing_list({'id': 'VMS'})
+            out.sample_list(samples=[])
+            out.software_list(software_list=[])
+            out.scan_settings_list(scan_settings=[])
+            out.instrument_configuration_list(instrument_configurations={
+                'id': 'VMS',
+                'component_list': []
+            })
+
             # open the run and spectrum list sections
             with out.run(id=analysis_name):
                 with out.spectrum_list(count=spectrum_count):
