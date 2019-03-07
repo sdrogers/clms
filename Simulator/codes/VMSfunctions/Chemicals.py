@@ -271,8 +271,7 @@ class ChemicalCreator(object):
         formula = Formula(formula)
         isotopes = Isotopes(formula)
         adducts = Adducts(formula)
-        chrom = None  # TODO: fix this
-        return KnownChemical(formula, isotopes, adducts, rt, intensity, chrom, None)
+        return KnownChemical(formula, isotopes, adducts, rt, intensity, chromatogram, None)
 
     def _get_unknown_msn(self, ms_level, chromatogram, sampled_peak, parent=None):
         if ms_level == 1:
@@ -287,9 +286,10 @@ class ChemicalCreator(object):
 
     def _get_parent_prop(self, ms_level):
         return np.random.uniform(0.2, 0.8, 1).tolist()[0]
-        # this needs to come from a density
+        # TODO: this needs to come from a density
 
     def _get_mz(self, ms_level, chromatogram, sampled_peak):
+        # TODO: work out what the hell this is
         # not sure what I meant this to do
         if chromatogram == None and sampled_peak == None:
             if ms_level == 2:
@@ -300,21 +300,21 @@ class ChemicalCreator(object):
             return sampled_peak.mz
         else:
             NotImplementedError()
-            # extract same stuff from chromatogram
+            # TODO: extract same stuff from chromatogram
 
     def _get_rt(self, chromatogram, sampled_peak):
         if self.use_chrom_tuple == False:
             return sampled_peak.rt
         else:
             NotImplementedError()
-            # extract same stuff from chromatogram
+            # TODO: extract same stuff from chromatogram
 
     def _get_intensity(self, chromatogram, sampled_peak):
         if self.use_chrom_tuple == False:
             return sampled_peak.intensity
         else:
             NotImplementedError()
-            # extract same stuff from chromatogram
+            # TODO: extract same stuff from chromatogram
 
     def _valid_ms1_chem(self, chem):
         if chem.max_intensity < self.min_ms1_intensity:
