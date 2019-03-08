@@ -150,7 +150,7 @@ class UnknownChemical(Chemical):
 
     def __repr__(self):
         return 'UnknownChemical mz=%.4f rt=%.2f max_intensity=%.2f' % (
-            self.isotopes[0][0], self.rt, self.isotopes[0][1])
+            self.isotopes[0][0], self.rt, self.max_intensity)
 
 
 class KnownChemical(Chemical):
@@ -170,7 +170,7 @@ class KnownChemical(Chemical):
         self.ms_level = 1
 
     def __repr__(self):
-        return 'KnownChemical - %r' % (self.formula.formula_string)
+        return 'KnownChemical - %r rt=%.2f max_intensity=%.2f' % (self.formula.formula_string, self.rt, self.max_intensity)
 
 
 class MSN(Chemical):
@@ -178,9 +178,10 @@ class MSN(Chemical):
     ms2+ fragments
     """
 
-    def __init__(self, mz, ms_level, parent_mass_prop, children=None, parent=None):
+    def __init__(self, mz, ms_level, prop_ms2_mass, parent_mass_prop, children=None, parent=None):
         self.isotopes = [(mz, None, "MSN")]
         self.ms_level = ms_level
+        self.prop_ms2_mass = prop_ms2_mass
         self.parent_mass_prop = parent_mass_prop
         self.children = children
         self.parent = parent
@@ -226,7 +227,7 @@ class ChemicalCreator(object):
 
     # needs to standardise children intensities, such that they add up to parent intensity times scalign factor
 
-    # need to add CRP
+    # TODO: need to add CRP
 
     def _get_children(self, parent_ms_level, parent):
         children_ms_level = parent_ms_level + 1
@@ -235,19 +236,33 @@ class ChemicalCreator(object):
             return None
         elif children_ms_level == self.ms_levels:
             kids = []
+            kids_intensity_proportions = self._get_msn_proportions(children_ms_level, n_peaks)
             for index_children in range(n_peaks):
                 kid = self._get_unknown_msn(children_ms_level, None, None, parent)
+                kid.prop_ms2_mass = kids_intensity_proportions[index_children]
                 kids.append(kid)
             return kids
         elif children_ms_level < self.ms_levels:
             kids = []
+            kids_intensity_proportions = self._get_msn_proportions(children_ms_level, n_peaks)
             for index_children in range(n_peaks):
                 kid = self._get_unknown_msn(children_ms_level, None, None, parent)
-                kid._get_children(children_ms_level, kid)
-                kids.append()
+                kid.children = self._get_children(children_ms_level, kid)
+                kid.prop_ms2_mass = kids_intensity_proportions[index_children]
+                kids.append(kid)
             return kids
         else:
             return None
+        
+    def _get_msn_proportions(self, children_ms_level,n_peaks):
+        if children_ms_level == 2:
+            kids_intensities = self.peak_sampler.sample(children_ms_level, n_peaks)
+        else:
+            kids_intensities = self.peak_sampler.sample(2, n_peaks)
+        kids_intensities_total = 0.0
+        kids_intensities_total = sum([x.intensity for x in kids_intensities])
+        kids_intensities_proportion = [x.intensity / kids_intensities_total for x in kids_intensities]
+        return kids_intensities_proportion
 
     def _get_n(self, ms_level):
         if ms_level == 1:
@@ -281,11 +296,12 @@ class ChemicalCreator(object):
             return UnknownChemical(mz, rt, intensity, chromatogram, None)
         else:
             mz = self._get_mz(ms_level, chromatogram, sampled_peak)
-            parent_mass_prop = self._get_parent_prop(ms_level)
-            return MSN(mz, ms_level, parent_mass_prop, None, parent)
+            parent_mass_prop = self._get_parent_mass_prop(ms_level)
+            prop_ms2_mass = None
+            return MSN(mz, ms_level, prop_ms2_mass, parent_mass_prop, None, parent)
 
-    def _get_parent_prop(self, ms_level):
-        return np.random.uniform(0.2, 0.8, 1).tolist()[0]
+    def _get_parent_mass_prop(self, ms_level):
+        return np.random.uniform(0.5, 0.9, 1).tolist()[0]
         # TODO: this needs to come from a density
 
     def _get_mz(self, ms_level, chromatogram, sampled_peak):

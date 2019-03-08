@@ -239,7 +239,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
             return intensity * chemical.chromatogram.get_relative_intensity(query_rt - chemical.rt)
         else:
             return self._get_intensity(chemical.parent, query_rt, which_isotope, which_adduct) * \
-                   chemical.parent_mass_prop
+                   chemical.parent_mass_prop * chemical.prop_ms2_mass
 
     def _get_mz(self, chemical, query_rt, which_isotope, which_adduct):
         if chemical.ms_level == 1:
