@@ -207,10 +207,11 @@ class TopNController(Controller):
             })
             out.data_processing_list({'id': 'VMS'})
 
-            # open the run and spectrum list sections
+            # open the run
             with out.run(id=analysis_name):
-                with out.spectrum_list(count=spectrum_count):
 
+                # open spectrum list sections
+                with out.spectrum_list(count=spectrum_count):
                     for ms1_id in sorted(ms1_id_to_precursors.keys()):
                         # write ms1 scan
                         ms1_scan = ms1_id_to_scan[ms1_id]
@@ -242,6 +243,15 @@ class TopNController(Controller):
                                         "charge": precursor.precursor_charge,
                                         "scan_id": precursor.precursor_scan_id
                                     })
+
+                # open chromatogram list sections
+                with out.chromatogram_list(count=1):
+                        tic_rts, tic_intensities = self._get_tic_chromatogram()
+                        out.write_chromatogram(tic_rts, tic_intensities, id='tic',
+                                               chromatogram_type='total ion current chromatogram',
+                                               time_unit='second')
+
+
         out.close()
 
     def _exclude(self, mz, rt, exclusion_list): # TODO: make this faster?
@@ -262,6 +272,15 @@ class TopNController(Controller):
             spectrum_count += np.sum([x.num_peaks for x in scans])
         return spectrum_count
 
+    def _get_tic_chromatogram(self):
+        time_array = []
+        intensity_array = []
+        for ms1_scan in self.scans[1]:
+            time_array.append(ms1_scan.rt)
+            intensity_array.append(np.sum(ms1_scan.intensities))
+        time_array = np.array(time_array)
+        intensity_array = np.array(intensity_array)
+        return time_array, intensity_array
 
 # class Controller:
 
