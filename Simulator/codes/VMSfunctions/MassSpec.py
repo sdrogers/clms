@@ -6,6 +6,7 @@ from events import Events
 
 from VMSfunctions.Chemicals import *
 from VMSfunctions.Chromatograms import *
+from VMSfunctions.Common import *
 
 
 # controller sends scan request
