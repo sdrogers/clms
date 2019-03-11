@@ -217,7 +217,9 @@ class TopNController(Controller):
                         ms1_scan = ms1_id_to_scan[ms1_id]
                         out.write_spectrum(
                             ms1_scan.mzs, ms1_scan.intensities,
-                            id=ms1_scan.scan_id, params=[
+                            id=ms1_scan.scan_id,
+                            scan_start_time=ms1_scan.rt/60.0,
+                            params=[
                                 'MS1 Spectrum',
                                 {'ms level': 1},
                                 {'total ion current': np.sum(ms1_scan.intensities)}
@@ -231,7 +233,9 @@ class TopNController(Controller):
                             for prod in ms2_scans: # write ms2 scan information
                                 out.write_spectrum(
                                     prod.mzs, prod.intensities,
-                                    id=prod.scan_id, params=[
+                                    id=prod.scan_id,
+                                    scan_start_time=prod.rt/60.0,
+                                    params=[
                                         'MSn Spectrum',
                                         {'ms level': 2},
                                         {'total ion current': np.sum(prod.intensities)}
