@@ -195,14 +195,17 @@ class TopNController(Controller):
                 },
                 source_files=[]
             )
-            out.data_processing_list({'id': 'VMS'})
             out.sample_list(samples=[])
-            out.software_list(software_list=[])
+            out.software_list(software_list={
+                'id': 'VMS',
+                'version': '1.0.0'
+            })
             out.scan_settings_list(scan_settings=[])
             out.instrument_configuration_list(instrument_configurations={
                 'id': 'VMS',
                 'component_list': []
             })
+            out.data_processing_list({'id': 'VMS'})
 
             # open the run and spectrum list sections
             with out.run(id=analysis_name):
