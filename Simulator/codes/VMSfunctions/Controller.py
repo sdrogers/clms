@@ -231,6 +231,7 @@ class TopNController(Controller):
                                     "charge": precursor.precursor_charge,
                                     "scan_id": precursor.precursor_scan_id
                                 })
+        out.close()
 
     def _exclude(self, mz, rt, exclusion_list): # TODO: make this faster?
         for x in exclusion_list:
