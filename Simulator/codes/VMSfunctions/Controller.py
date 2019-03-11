@@ -177,6 +177,11 @@ class TopNController(Controller):
     def write_mzML(self, analysis_name, out_file):
         ms1_id_to_scan = {x.scan_id: x for x in self.scans[1]}
         spectrum_count = self._get_spectrum_count(ms1_id_to_scan)
+
+        ms1_id_to_precursors = defaultdict(list)
+        for p in self.mass_spec.precursor_information:
+            ms1_id_to_precursors[p.precursor_scan_id].append(p)
+
         with MzMLWriter(open(out_file, 'wb')) as out:
 
             # add default controlled vocabularies
@@ -203,10 +208,9 @@ class TopNController(Controller):
             with out.run(id=analysis_name):
                 with out.spectrum_list(count=spectrum_count):
 
-                    for precursor, scans in self.mass_spec.precursor_information.items():
-
-                        # write precursor scan
-                        ms1_scan = ms1_id_to_scan[precursor.precursor_scan_id]
+                    for ms1_id in sorted(ms1_id_to_precursors.keys()):
+                        # write ms1 scan
+                        ms1_scan = ms1_id_to_scan[ms1_id]
                         out.write_spectrum(
                             ms1_scan.mzs, ms1_scan.intensities,
                             id=ms1_scan.scan_id, params=[
@@ -215,22 +219,26 @@ class TopNController(Controller):
                                 {'total ion current': np.sum(ms1_scan.intensities)}
                             ])
 
-                        # write product scans
-                        for prod in scans:
-                            out.write_spectrum(
-                                prod.mzs, prod.intensities,
-                                id=prod.scan_id, params=[
-                                    'MSn Spectrum',
-                                    {'ms level': 2},
-                                    {'total ion current': np.sum(prod.intensities)}
-                                ],
-                                # include precursor information
-                                precursor_information={
-                                    "mz": precursor.precursor_mz,
-                                    "intensity": precursor.precursor_intensity,
-                                    "charge": precursor.precursor_charge,
-                                    "scan_id": precursor.precursor_scan_id
-                                })
+                        # get all precursor ions in this ms1 scan
+                        precursors = ms1_id_to_precursors[ms1_id]
+                        for precursor in precursors:
+                            # get all ms2 scans produced from this precursor ion
+                            ms2_scans = self.mass_spec.precursor_information[precursor]
+                            for prod in ms2_scans: # write ms2 scan information
+                                out.write_spectrum(
+                                    prod.mzs, prod.intensities,
+                                    id=prod.scan_id, params=[
+                                        'MSn Spectrum',
+                                        {'ms level': 2},
+                                        {'total ion current': np.sum(prod.intensities)}
+                                    ],
+                                    # also include precursor information
+                                    precursor_information={
+                                        "mz": precursor.precursor_mz,
+                                        "intensity": precursor.precursor_intensity,
+                                        "charge": precursor.precursor_charge,
+                                        "scan_id": precursor.precursor_scan_id
+                                    })
         out.close()
 
     def _exclude(self, mz, rt, exclusion_list): # TODO: make this faster?
