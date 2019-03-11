@@ -2,9 +2,12 @@ import numpy as np
 import re
 import scipy
 import scipy.stats
+import math
+import copy
+from random import sample
+import sys
 
-from VMSfunctions.Common import adductTransformation
-
+from VMSfunctions.ChineseRestaurantProcess import *
 
 # Compound was just something I wrote to fill with the stuff I extracted from the HMBD database
 # wouldnt go into any of the stuff you are writing
@@ -196,7 +199,7 @@ class ChemicalCreator(object):
         self.chromatograms = chromatograms
 
     def sample(self, min_rt, max_rt, min_ms1_intensity, n_ms1_peaks, ms_levels=2, chemical_type=None, chromatogram_type="Empirical",
-               formula_list=None, use_chrom_tuple=False):
+               formula_list=None, use_chrom_tuple=False, alpha=math.inf, compound_list=None):
         self.n_ms1_peaks = n_ms1_peaks
         self.ms_levels = ms_levels
         self.chemical_type = chemical_type
@@ -207,11 +210,22 @@ class ChemicalCreator(object):
         self.max_rt = max_rt
         self.min_ms1_intensity = min_ms1_intensity
         self.n_ms1_peaks = n_ms1_peaks
+        self.crp_samples = [[] for i in range(self.ms_levels)]
+        self.crp_index = [[] for i in range(self.ms_levels)]
+        self.alpha = alpha
         if self.ms_levels > 2:
             print("Warning ms_level > 3 not implemented properly yet. Uses ms_level = 2 information for now")
         n_ms1 = self._get_n(1)
-        chemicals = []
+        if self.chemical_type == "Known" and compound_list != None:
+            if len(compound_list)<n_ms1:
+                sys.exit('compound_list not long enough')
+            self.formula_list = []
+            compound_sample = sample(range(len(compound_list)),n_ms1)
+            for formula_index in range(n_ms1):
+                self.formula_list.append(compound_list[compound_sample[formula_index]].chemical_formula)
+            print(self.formula_list)
         formula = None
+        chemicals = []
         i = 0
         while len(chemicals) < n_ms1:
             sampled_peak = self.peak_sampler.sample(ms_level=1, n_peaks=1)
@@ -225,10 +239,6 @@ class ChemicalCreator(object):
                 i += 1
         return chemicals
 
-    # needs to standardise children intensities, such that they add up to parent intensity times scalign factor
-
-    # TODO: need to add CRP
-
     def _get_children(self, parent_ms_level, parent):
         children_ms_level = parent_ms_level + 1
         n_peaks = self._get_n(children_ms_level)
@@ -238,18 +248,30 @@ class ChemicalCreator(object):
             kids = []
             kids_intensity_proportions = self._get_msn_proportions(children_ms_level, n_peaks)
             for index_children in range(n_peaks):
-                kid = self._get_unknown_msn(children_ms_level, None, None, parent)
-                kid.prop_ms2_mass = kids_intensity_proportions[index_children]
+                next_crp = Restricted_Crp(self.alpha, self.crp_index[children_ms_level-1], index_children)
+                self.crp_index[children_ms_level-1].append(next_crp)
+                if next_crp == max(self.crp_index[children_ms_level-1]):
+                    kid = self._get_unknown_msn(children_ms_level, None, None, parent)
+                    kid.prop_ms2_mass = kids_intensity_proportions[index_children]
+                    self.crp_samples[children_ms_level-1].append(kid)
+                kid = self.crp_samples[children_ms_level-1][next_crp]
                 kids.append(kid)
             return kids
         elif children_ms_level < self.ms_levels:
             kids = []
             kids_intensity_proportions = self._get_msn_proportions(children_ms_level, n_peaks)
             for index_children in range(n_peaks):
-                kid = self._get_unknown_msn(children_ms_level, None, None, parent)
-                kid.children = self._get_children(children_ms_level, kid)
-                kid.prop_ms2_mass = kids_intensity_proportions[index_children]
+                next_crp = Restricted_Crp(self.alpha, self.crp_index[children_ms_level-1], index_children)
+                self.crp_index[children_ms_level - 1].append(next_crp)
+                if next_crp == max(self.crp_index[children_ms_level - 1]):
+                    kid = self._get_unknown_msn(children_ms_level, None, None, parent)
+                    kid.prop_ms2_mass = kids_intensity_proportions[index_children]
+                    kid.children = self._get_children(children_ms_level, kid)
+                    self.crp_samples[children_ms_level - 1].append(kid)
+                kid = copy.deepcopy(self.crp_samples[children_ms_level - 1][next_crp])
+                kid.parent_mass_prop = self._get_parent_mass_prop(children_ms_level)
                 kids.append(kid)
+            self.crp_samples[children_ms_level-1].extend(kids)
             return kids
         else:
             return None
@@ -259,7 +281,6 @@ class ChemicalCreator(object):
             kids_intensities = self.peak_sampler.sample(children_ms_level, n_peaks)
         else:
             kids_intensities = self.peak_sampler.sample(2, n_peaks)
-        kids_intensities_total = 0.0
         kids_intensities_total = sum([x.intensity for x in kids_intensities])
         kids_intensities_proportion = [x.intensity / kids_intensities_total for x in kids_intensities]
         return kids_intensities_proportion
@@ -282,7 +303,7 @@ class ChemicalCreator(object):
     def _get_known_ms1(self, formula, chromatogram, sampled_peak):
         mz = self._get_mz(1, chromatogram, sampled_peak)
         rt = self._get_rt(chromatogram, sampled_peak)
-        intensity = self.get_intensity(chromatogram, sampled_peak)
+        intensity = self._get_intensity(chromatogram, sampled_peak)
         formula = Formula(formula)
         isotopes = Isotopes(formula)
         adducts = Adducts(formula)
