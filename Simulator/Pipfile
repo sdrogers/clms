@@ -18,6 +18,7 @@ pyyaml = "*"
 events = "*"
 psims = "*"
 tornado = "==5.1.1"
+pynumpress = "*"
 
 [dev-packages]
 
