@@ -15,7 +15,7 @@ from VMSfunctions.Common import *
 # simplest controller: just generates ms1 data
 
 class Scan(object):
-    def __init__(self, scan_id, mzs, intensities, ms_level, rt):
+    def __init__(self, scan_id, mzs, intensities, ms_level, rt, density=None):
         assert len(mzs) == len(intensities)
         self.scan_id = scan_id
 
@@ -27,6 +27,8 @@ class Scan(object):
         self.ms_level = ms_level
         self.rt = rt
         self.num_peaks = len(mzs)
+
+        self.density = density
         self.scan_duration = self._get_scan_duration()
 
     def filter_intensity(self, min_intensity):
@@ -36,8 +38,11 @@ class Scan(object):
         self.num_peaks = len(self.mzs)
 
     def _get_scan_duration(self):
-        # TODO: improve this
-        return 1
+        if self.density is not None:
+            scan_duration = self.density.scan_durations(self.ms_level, 1).flatten()
+            return scan_duration[0]
+        else: # TODO: improve this
+            return 1
 
     def __repr__(self):
         return 'Scan %d -- num_peaks=%d rt=%.2f ms_level=%d' % (self.scan_id, self.num_peaks, self.rt, self.ms_level)
@@ -104,7 +109,7 @@ class MassSpectrometer(object):
 # Independent here refers to how the intensity of each peak in a scan is independent of each other
 # i.e. there's no ion supression effect
 class IndependentMassSpectrometer(MassSpectrometer):
-    def __init__(self, ionisation_mode, chemicals):
+    def __init__(self, ionisation_mode, chemicals, density=None):
         super().__init__(ionisation_mode)
         self.chemicals = chemicals
         self.idx = 0
@@ -112,6 +117,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
         self.queue = []
         self.repeating_scan_parameters = None
         self.precursor_information = defaultdict(list) # key: Precursor object, value: ms2 scans
+        self.density = density # a PeakDensityEstimator object
 
     def run(self, max_time):
         self.fire_event(MassSpectrometer.ACQUISITION_STREAM_OPENING)
@@ -179,7 +185,8 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
         scan_mzs = np.array(scan_mzs)
         scan_intensities = np.array(scan_intensities)
-        return Scan(self.idx, scan_mzs, scan_intensities, ms_level, scan_time)
+        return Scan(self.idx, scan_mzs, scan_intensities, ms_level, scan_time,
+                    density=self.density)
 
     def _get_all_mz_peaks(self, chemical, query_rt, ms_level, isolation_windows):
 
