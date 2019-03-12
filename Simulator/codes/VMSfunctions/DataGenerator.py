@@ -9,7 +9,7 @@ import pylab as plt
 import pymzml
 from sklearn.neighbors import KernelDensity
 
-from .Common import MZ, RT, INTENSITY, N_PEAKS, MZ_INTENSITY
+from .Common import MZ, RT, INTENSITY, N_PEAKS, MZ_INTENSITY, SCAN_DURATION
 
 
 class PeakSample(object):
@@ -64,10 +64,11 @@ class DataSource(object):
         :return: nothing, but the instance variables self.peaks and self.num_peaks will be populated by the peak objects
         at different ms level.
         """
-        scan_peaks, scan_num_peaks, scan_noisy_peaks = self._load_mzml(mzml_path)
+        scan_peaks, scan_num_peaks, scan_noisy_peaks, scan_durations = self._load_mzml(mzml_path)
         self.peaks = scan_peaks
         self.noisy_peaks = scan_noisy_peaks
         self.num_peaks = scan_num_peaks
+        self.scan_durations = scan_durations
 
     def plot_histogram(self, data_type, ms_level, log=False, bins=100):
         """
@@ -99,6 +100,8 @@ class DataSource(object):
         """
         if data_type == N_PEAKS:  # get observed peak counts across all spectra in the data
             values = self.num_peaks[ms_level]
+        elif data_type == SCAN_DURATION:
+            values = self.scan_durations[ms_level]
         else:  # get observed mz, rt or intensity values of all peaks in the data
             peaks = self.peaks[ms_level]
             values = list(getattr(x, data_type) for x in peaks)
@@ -119,23 +122,24 @@ class DataSource(object):
         """
         scan_peaks = defaultdict(list)  # good quality peaks across all scans
         noisy_peaks = defaultdict(list)  # noisy peaks across all scans (outside threshold)
-        scan_num_peaks = defaultdict(list)  # number of peaks for each ms_level per scan
+        scan_num_peaks = defaultdict(list)  # number of peaks per scan for each ms_level
+        scan_durations = defaultdict(list) # durations per scan for each ms level
         for filename in glob.glob(os.path.join(data_path, '*.mzML')):
             run = pymzml.run.Reader(filename, obo_version=self.obo_version,
                                     MS1_Precision=self.ms1_precision,
                                     extraAccessions=[('MS:1000016', ['value', 'unitName'])])
 
             total_peaks = defaultdict(int)
+            start_time = 0
             for scan_number, spectrum in enumerate(run):
-                spectrum_peaks = defaultdict(list)
+                rt, units = spectrum.scan_time
+                if units == 'minute':
+                    rt *= 60.0
 
                 # loop through spectrum and get all peaks above threshold
+                spectrum_peaks = defaultdict(list)
                 for mz, intensity in spectrum.peaks('centroided'):
                     ms_level = spectrum.ms_level
-                    rt, units = spectrum.scan_time
-                    if units == 'minute':
-                        rt *= 60.0
-
                     p = PeakSample(mz, rt, intensity, ms_level)
                     if self._valid_peak(p):
                         spectrum_peaks[ms_level].append(p)
@@ -143,6 +147,11 @@ class DataSource(object):
                         noisy_peaks[ms_level].append(p)
 
                 # store the results from each spectrum
+                end_time = rt
+                duration = end_time - start_time
+                scan_durations[ms_level].append(duration)
+                start_time = end_time
+
                 for ms_level in spectrum_peaks:
                     n = len(spectrum_peaks[ms_level])
                     if n > 0:
@@ -150,7 +159,7 @@ class DataSource(object):
                         scan_num_peaks[ms_level].append(n)
                         total_peaks[ms_level] += n
             print('%s (ms1=%d, ms2=%d)' % (filename, total_peaks[1], total_peaks[2]))
-        return scan_peaks, scan_num_peaks, noisy_peaks
+        return scan_peaks, scan_num_peaks, noisy_peaks, scan_durations
 
     def _valid_peak(self, peak):
         ms_level = peak.ms_level
@@ -189,6 +198,9 @@ class DensityEstimator(object):
     def n_peaks(self, ms_level, n_sample):
         return self.kdes[(N_PEAKS, ms_level)].sample(n_sample)
 
+    def scan_durations(self, ms_level, n_sample):
+        return self.kdes[(SCAN_DURATION, ms_level)].sample(n_sample)
+
     def _plot(self, kde, X, title):
         X_plot = np.linspace(np.min(X), np.max(X), 1000)[:, np.newaxis]
         log_dens = kde.score_samples(X_plot)
@@ -206,7 +218,8 @@ class PeakDensityEstimator(object):
         self.kdes = {}
         self.kernel = 'gaussian'
 
-    def kde(self, data_source, ms_level, bandwidth_mz_int=1.0, bandwidth_rt=5.0, bandwidth_n_peaks=1.0):
+    def kde(self, data_source, ms_level, bandwidth_mz_int=1.0, bandwidth_rt=5.0, bandwidth_n_peaks=1.0,
+            bandwidth_scan_durations=0.01):
         # train kde on mz-intensity values
         mz = data_source.get_data(MZ, ms_level)
         intensity = data_source.get_data(INTENSITY, ms_level, log=True)
@@ -221,6 +234,11 @@ class PeakDensityEstimator(object):
         X = data_source.get_data(N_PEAKS, ms_level)
         self.kdes[(N_PEAKS, ms_level)] = KernelDensity(kernel=self.kernel, bandwidth=bandwidth_n_peaks).fit(X)
 
+        # train kde on scan durations
+        X = data_source.get_data(SCAN_DURATION, ms_level)
+        self.kdes[(SCAN_DURATION, ms_level)] = KernelDensity(kernel=self.kernel, bandwidth=bandwidth_scan_durations).fit(X)
+
+
     def sample(self, ms_level, n_sample):
         mz_intensity_vals = self.kdes[(MZ_INTENSITY, ms_level)].sample(n_sample)
         rt_vals = self.kdes[(RT, ms_level)].sample(n_sample)
@@ -229,6 +247,9 @@ class PeakDensityEstimator(object):
 
     def n_peaks(self, ms_level, n_sample):
         return self.kdes[(N_PEAKS, ms_level)].sample(n_sample)
+
+    def scan_durations(self, ms_level, n_sample):
+        return self.kdes[(SCAN_DURATION, ms_level)].sample(n_sample)
 
 
 class PeakSampler(object):
