@@ -74,12 +74,14 @@ ExclusionItem = namedtuple('ExclusionItem', 'from_mz to_mz from_rt to_rt')
 Precursor = namedtuple('Precursor', 'precursor_mz precursor_intensity precursor_charge precursor_scan_id')
 
 class TopNController(Controller):
-    def __init__(self, mass_spec, N, mz_tol, rt_tol, exclusion_list=[], min_ms2_intensity=0):
+    def __init__(self, mass_spec, N, mz_tol, rt_tol, exclusion_list=None, min_ms2_intensity=0):
         super().__init__(mass_spec)
         self.last_ms1_scan = None
         self.N = N
         self.mz_tol = mz_tol # the m/z window around a precursor ion to be fragmented
         self.rt_tol = rt_tol # the rt window to prevent the same precursor ion to be fragmented again
+        if exclusion_list is None:
+            exclusion_list = []
         self.exclusion_list = exclusion_list # a list of ExclusionItem
         self.min_ms2_intensity = min_ms2_intensity
 
