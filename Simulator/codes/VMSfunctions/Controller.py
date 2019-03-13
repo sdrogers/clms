@@ -83,11 +83,14 @@ class TopNController(Controller):
         self.exclusion_list = exclusion_list # a list of ExclusionItem
         self.min_ms2_intensity = min_ms2_intensity
 
+        mass_spec.reset()
+
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
         default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[(0, 1e3)]])
         mass_spec.set_repeating_scan(default_scan)
 
+        # register new event handlers under this controller
         mass_spec.register(MassSpectrometer.MS_SCAN_ARRIVED, self.handle_scan)
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_OPENING, self.handle_acquisition_open)
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_CLOSING, self.handle_acquisition_closing)

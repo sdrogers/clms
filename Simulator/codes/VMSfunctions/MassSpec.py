@@ -105,6 +105,12 @@ class MassSpectrometer(object):
         e = self.event_dict[event_name]
         e += handler # register a new event handler for e
 
+    def clear(self, event_name):
+        if event_name not in self.event_dict:
+            raise ValueError('Unknown event name')
+        e = self.event_dict[event_name]
+        e.targets = []
+
 
 # Independent here refers to how the intensity of each peak in a scan is independent of each other
 # i.e. there's no ion supression effect
@@ -158,6 +164,11 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
     def set_repeating_scan(self, params):
         self.repeating_scan_parameters = params
+
+    def reset(self):
+        for key in self.event_dict: # clear event handlers
+            self.clear(key)
+        self.time = 0 # reset internal time to 0
 
     def _get_scan(self, scan_time, param):
         """
