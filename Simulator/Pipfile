@@ -11,6 +11,7 @@ ipython = "*"
 matplotlib = "*"
 pythonnet = {version = "*",os_name = "== 'nt'"}
 jupyter = "*"
+notebook = "==5.7.4"
 pymzml = "*"
 blist = "*"
 sklearn = "*"
