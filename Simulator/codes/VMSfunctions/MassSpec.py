@@ -168,7 +168,8 @@ class IndependentMassSpectrometer(MassSpectrometer):
     def reset(self):
         for key in self.event_dict: # clear event handlers
             self.clear(key)
-        self.time = 0 # reset internal time to 0
+        self.time = 0 # reset internal time and index to 0
+        self.idx = 0
 
     def _get_scan(self, scan_time, param):
         """
