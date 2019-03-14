@@ -231,11 +231,11 @@ class ChemicalCreator(object):
         total = 0
         while len(chemicals) < n_ms1:
             sampled_peak = self.peak_sampler.sample(ms_level=1, n_peaks=1)
-            chrom = self.chromatograms.sample()
             if self.chemical_type == "Known":
                 formula = self.formula_list[i]
-            chem = self._get_chemical(1, formula, chrom, sampled_peak[0])
-            chem.max_intensity = max(chrom.raw_intensities)
+            chem = self._get_chemical(1, formula, None, sampled_peak[0])
+            chrom = self.chromatograms.sample(chem.max_intensity)
+            chem.chromatogram = chrom
             if chem is not None and self._valid_ms1_chem(chem):
                 chem.children = self._get_children(1, chem)
                 chemicals.append(chem)
