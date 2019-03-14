@@ -200,6 +200,7 @@ class ChemicalCreator(object):
 
     def sample(self, min_rt, max_rt, min_ms1_intensity, n_ms1_peaks, ms_levels=2, chemical_type=None, chromatogram_type="Empirical",
                formula_list=None, use_chrom_tuple=False, alpha=math.inf, compound_list=None):
+        # TODO: Speed this up!
         self.n_ms1_peaks = n_ms1_peaks
         self.ms_levels = ms_levels
         self.chemical_type = chemical_type
@@ -214,8 +215,9 @@ class ChemicalCreator(object):
         self.crp_index = [[] for i in range(self.ms_levels)]
         self.alpha = alpha
         if self.ms_levels > 2:
-            print("Warning ms_level > 3 not implemented properly yet. Uses ms_level = 2 information for now")
+            print("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
         n_ms1 = self._get_n(1)
+        print(n_ms1, " ms1 peaks to be created.")
         if self.chemical_type == "Known" and compound_list != None:
             if len(compound_list)<n_ms1:
                 sys.exit('compound_list not long enough')
@@ -223,10 +225,10 @@ class ChemicalCreator(object):
             compound_sample = sample(range(len(compound_list)),n_ms1)
             for formula_index in range(n_ms1):
                 self.formula_list.append(compound_list[compound_sample[formula_index]].chemical_formula)
-            print(self.formula_list)
         formula = None
         chemicals = []
         i = 0
+        total = 0
         while len(chemicals) < n_ms1:
             sampled_peak = self.peak_sampler.sample(ms_level=1, n_peaks=1)
             chrom = self.chromatograms.sample()
@@ -237,6 +239,9 @@ class ChemicalCreator(object):
                 chem.children = self._get_children(1, chem)
                 chemicals.append(chem)
                 i += 1
+            total += 1
+            if (i/10 == math.floor(i/10)):
+                print("i = ", i, "Total = ", total)
         return chemicals
 
     def _get_children(self, parent_ms_level, parent):
@@ -292,7 +297,7 @@ class ChemicalCreator(object):
         elif ms_level == 2:
             return int(self.peak_sampler.density_estimator.n_peaks(2, 1))  # not sure this will work
         else:
-            return int(self.peak_sampler.density_estimator.n_peaks(2, 1))
+            return int(math.floor(self.peak_sampler.density_estimator.n_peaks(2, 1) / (5**(ms_level-2))))
 
     def _get_chemical(self, ms_level, formula, chromatogram, sampled_peak):
         if formula != None:
