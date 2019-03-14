@@ -217,6 +217,7 @@ class ChemicalCreator(object):
         self.crp_samples = [[] for i in range(self.ms_levels)]
         self.crp_index = [[] for i in range(self.ms_levels)]
         self.alpha = alpha
+        self.counts = []
         if self.ms_levels > 2:
             raise ValueError("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
         n_ms1 = self._get_n(1)
@@ -238,14 +239,15 @@ class ChemicalCreator(object):
             if self.chemical_type == "Known":
                 formula = self.formula_list[i]
             chem = self._get_chemical(1, formula, None, sampled_peak[0])
-            chrom = self.chromatograms.sample(chem.max_intensity)
-            chem.chromatogram = chrom
-            if chem is not None and self._valid_ms1_chem(chem):
+            #chem.chromatogram = self.chromatograms.chromatograms[0]
+            chem.chromatogram = self.chromatograms.sample(chem.max_intensity)
+            # TODO: add cut-off into density estimator (rt_range, intensity_min, mz_range)
+            if chem is not None and self._valid_ms1_chem(chem): # once TODO is done, can remove this line and total
                 chem.children = self._get_children(1, chem)
                 chemicals.append(chem)
                 i += 1
             total += 1
-            if (i/10 == math.floor(i/10)):
+            if (i/25 == math.floor(i/25)):
                 logger.debug("i = {} Total = {}".format(i, total))
         return chemicals
 
@@ -259,7 +261,7 @@ class ChemicalCreator(object):
             kids_intensity_proportions = self._get_msn_proportions(children_ms_level, n_peaks)
             if self.alpha < math.inf:
                 for index_children in range(n_peaks):
-                    next_crp = Restricted_Crp(self.alpha, self.crp_index[children_ms_level-1], index_children)
+                    next_crp, self.counts = Restricted_Crp(self.alpha, self.counts, self.crp_index[children_ms_level-1], index_children)
                     self.crp_index[children_ms_level - 1].append(next_crp)
                     if next_crp == max(self.crp_index[children_ms_level - 1]):
                         kid = self._get_unknown_msn(children_ms_level, None, None, parent)
@@ -273,6 +275,7 @@ class ChemicalCreator(object):
                         kid.parent_mass_prop = self._get_parent_mass_prop(children_ms_level)
                     else:
                         kid = self.crp_samples[children_ms_level-1][next_crp]
+                    kids.append(kid)
                 self.crp_samples[children_ms_level-1].extend(kids)
             else:
                 for index_children in range(n_peaks):
@@ -280,7 +283,7 @@ class ChemicalCreator(object):
                     kid.prop_ms2_mass = kids_intensity_proportions[index_children]
                     if children_ms_level < self.ms_levels:
                         kid.children = self._get_children(children_ms_level, kid)
-            kids.append(kid)
+                    kids.append(kid)
             return kids
         
     def _get_msn_proportions(self, children_ms_level,n_peaks):

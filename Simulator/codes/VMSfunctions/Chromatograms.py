@@ -1,13 +1,12 @@
+import logging
+
 import numpy as np
 import pandas as pd
 import scipy
 import scipy.stats
 
-import logging
 logger = logging.getLogger('Chromatograms')
-
-from VMSfunctions.Common import chromatogramDensityNormalisation
-
+from VMSfunctions.Common import *
 
 class Chromatogram(object):
 
@@ -118,19 +117,22 @@ class ChromatogramCreator(object):
         self.max_intensities = []
         for i in range(len(self.chromatograms)):
             self.max_intensities.append(max(self.chromatograms[i].raw_intensities))
+        self.max_intensities = np.array(self.max_intensities)
+        idx = np.argsort(self.max_intensities)
+        self.chromatograms = self.chromatograms[idx]
+        self.max_intensities = self.max_intensities[idx]
 
     def sample(self, intensity = None):
-        if self.chromatograms != None and intensity == None:
+        if self.chromatograms is not None and intensity == None:
             selected = np.random.choice(len(self.chromatograms), 1)[0]
             return self.chromatograms[selected]
-        elif self.chromatograms != None and intensity is not None:
-            diff = [(abs(self.max_intensities[i] - intensity)) for i in range(len(self.max_intensities))]
-            return self.chromatograms[np.argmin(diff)]
+        elif self.chromatograms is not None and intensity is not None:
+            return takeClosest(self.max_intensities, intensity)
         else:
             NotImplementedError("Functional Chromatograms not implemented here yet")
 
     def _load_chromatograms(self, xcms_output):
-        return self._load_xcms_df(xcms_output)
+        return np.array(self._load_xcms_df(xcms_output))
 
     def _load_xcms_df(self, df_file):
         """
