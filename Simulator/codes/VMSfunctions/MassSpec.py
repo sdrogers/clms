@@ -120,7 +120,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
         self.chemicals = chemicals
         self.idx = 0
         self.time = 0
-        self.queue = []
+        self.task_queue = []
         self.repeating_scan_parameters = None
         self.precursor_information = defaultdict(list) # key: Precursor object, value: ms2 scans
         self.density = density # a PeakDensityEstimator object
@@ -131,11 +131,11 @@ class IndependentMassSpectrometer(MassSpectrometer):
             while self.time < max_time:
 
                 # if the processing queue is empty, then just do the repeating scan
-                if len(self.queue) == 0:
+                if len(self.task_queue) == 0:
                     param = self.repeating_scan_parameters
                 else:
                     # otherwise pop the parameter for the next scan from the queue
-                    param = self.queue.pop(0)
+                    param = self.task_queue.pop(0)
                 scan = self.get_next_scan(param)
 
                 # if MS2 and above, and the controller tells us which precursor ion the scan is coming from, store it
@@ -157,7 +157,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
             return None
 
     def add_to_queue(self, param):
-        self.queue.append(param)
+        self.task_queue.append(param)
 
     def disable_repeating_scan(self):
         self.set_repeating_scan(None)
