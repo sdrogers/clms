@@ -112,11 +112,17 @@ class ChromatogramCreator(object):
             self.chromatograms = self._load_chromatograms(self.xcms_output)
         else:
             self.chromatograms = None
+        self.max_intensities = []
+        for i in range(len(self.chromatograms)):
+            self.max_intensities.append(max(self.chromatograms[i].raw_intensities))
 
-    def sample(self):
-        if self.chromatograms != None:
+    def sample(self, intensity = None):
+        if self.chromatograms != None and intensity == None:
             selected = np.random.choice(len(self.chromatograms), 1)[0]
             return self.chromatograms[selected]
+        elif self.chromatograms != None and intensity is not None:
+            diff = [(abs(self.max_intensities[i] - myNumber)) for i in range(len(self.max_intensities))]
+            return self.chromatograms[np.argmin(diff)]
         else:
             NotImplementedError("Functional Chromatograms not implemented here yet")
 

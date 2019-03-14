@@ -113,7 +113,7 @@ class TopNController(Controller):
         elif scan.ms_level == 2: # if we get ms2 scan, then do something with it
             scan.filter_intensity(self.min_ms2_intensity)
             if scan.num_peaks > 0:
-                self._plot_scan(scan)
+                #self._plot_scan(scan)
                 for mz, intensity in zip(scan.mzs, scan.intensities):
                     print(mz, intensity)
                 print()
@@ -157,7 +157,7 @@ class TopNController(Controller):
                 mz_lower = mz * (1 - self.mz_tol / 1e6)
                 mz_upper = mz * (1 + self.mz_tol / 1e6)
                 isolation_windows = [[(mz_lower, mz_upper)]]
-                print('Isolated precursor ion', mz, 'window', isolation_windows)
+                #print('Isolated precursor ion', mz, 'window', isolation_windows)
                 dda_scan_params = ScanParameters()
                 dda_scan_params.set(ScanParameters.MS_LEVEL, 2)
                 dda_scan_params.set(ScanParameters.ISOLATION_WINDOWS, isolation_windows)
@@ -268,7 +268,7 @@ class TopNController(Controller):
             exclude_mz = x.from_mz < mz < x.to_mz
             exclude_rt = x.from_rt < rt < x.to_rt
             if exclude_mz and exclude_rt:
-                print('Excluded precursor ion', mz, rt, x)
+                #print('Excluded precursor ion', mz, rt, x)
                 return True
         return False
 
