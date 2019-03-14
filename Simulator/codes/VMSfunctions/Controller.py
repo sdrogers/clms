@@ -37,6 +37,110 @@ class Controller(object):
         plt.title('Scan {0} {1}s -- {2} peaks'.format(scan.scan_id, scan.rt, scan.num_peaks))
         plt.show()
 
+    def write_mzML(self, analysis_name, out_file):
+        ms1_id_to_scan = {x.scan_id: x for x in self.scans[1]}
+        spectrum_count = self._get_spectrum_count(ms1_id_to_scan)
+
+        ms1_id_to_precursors = defaultdict(list)
+        for p in self.mass_spec.precursor_information:
+            ms1_id_to_precursors[p.precursor_scan_id].append(p)
+
+        with MzMLWriter(open(out_file, 'wb')) as out:
+
+            # add default controlled vocabularies
+            out.controlled_vocabularies()
+
+            # TODO: correctly set these fields
+            out.file_description(
+                file_contents={
+                    'MSn spectrum': '',
+                    'centroid spectrum': ''
+                },
+                source_files=[]
+            )
+            out.sample_list(samples=[])
+            out.software_list(software_list={
+                'id': 'VMS',
+                'version': '1.0.0'
+            })
+            out.scan_settings_list(scan_settings=[])
+            out.instrument_configuration_list(instrument_configurations={
+                'id': 'VMS',
+                'component_list': []
+            })
+            out.data_processing_list({'id': 'VMS'})
+
+            # open the run
+            with out.run(id=analysis_name):
+
+                # open spectrum list sections
+                with out.spectrum_list(count=spectrum_count):
+                    for ms1_id in sorted(ms1_id_to_precursors.keys()):
+                        # write ms1 scan
+                        ms1_scan = ms1_id_to_scan[ms1_id]
+                        out.write_spectrum(
+                            ms1_scan.mzs, ms1_scan.intensities,
+                            id=ms1_scan.scan_id,
+                            scan_start_time=ms1_scan.rt/60.0,
+                            params=[
+                                'MS1 Spectrum',
+                                {'ms level': 1},
+                                {'total ion current': np.sum(ms1_scan.intensities)}
+                            ])
+
+                        # get all precursor ions in this ms1 scan
+                        precursors = ms1_id_to_precursors[ms1_id]
+                        for precursor in precursors:
+                            # get all ms2 scans produced from this precursor ion
+                            ms2_scans = self.mass_spec.precursor_information[precursor]
+                            for prod in ms2_scans: # write ms2 scan information
+                                out.write_spectrum(
+                                    prod.mzs, prod.intensities,
+                                    id=prod.scan_id,
+                                    scan_start_time=prod.rt/60.0,
+                                    params=[
+                                        'MSn Spectrum',
+                                        {'ms level': 2},
+                                        {'total ion current': np.sum(prod.intensities)}
+                                    ],
+                                    # also include precursor information
+                                    precursor_information={
+                                        "mz": precursor.precursor_mz,
+                                        "intensity": precursor.precursor_intensity,
+                                        "charge": precursor.precursor_charge,
+                                        "scan_id": precursor.precursor_scan_id
+                                    })
+
+                # open chromatogram list sections
+                with out.chromatogram_list(count=1):
+                        tic_rts, tic_intensities = self._get_tic_chromatogram()
+                        out.write_chromatogram(tic_rts, tic_intensities, id='tic',
+                                               chromatogram_type='total ion current chromatogram',
+                                               time_unit='second')
+
+
+        out.close()
+        
+    def _get_spectrum_count(self, ms1_id_to_scan):
+        spectrum_count = 0
+        for precursor, scans in self.mass_spec.precursor_information.items():
+            ms1_scan = ms1_id_to_scan[precursor.precursor_scan_id]
+            ms2_scans = scans
+            spectrum_count += ms1_scan.num_peaks
+            spectrum_count += np.sum([x.num_peaks for x in scans])
+        return spectrum_count
+
+    def _get_tic_chromatogram(self):
+        time_array = []
+        intensity_array = []
+        for ms1_scan in self.scans[1]:
+            time_array.append(ms1_scan.rt)
+            intensity_array.append(np.sum(ms1_scan.intensities))
+        time_array = np.array(time_array)
+        intensity_array = np.array(intensity_array)
+        return time_array, intensity_array
+    
+    
 
 class SimpleMs1Controller(Controller):
     def __init__(self, mass_spec):
@@ -44,6 +148,7 @@ class SimpleMs1Controller(Controller):
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
         default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[(0, 1e3)]])
+        mass_spec.reset()
         mass_spec.set_repeating_scan(default_scan)
         mass_spec.register(MassSpectrometer.MS_SCAN_ARRIVED, self.handle_scan)
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_OPENING, self.handle_acquisition_open)
@@ -54,10 +159,10 @@ class SimpleMs1Controller(Controller):
 
     def handle_scan(self, scan):
         super().handle_scan(scan)
-        if scan.num_peaks > 0:
-            self._plot_scan(scan)
-            for mz, intensity in zip(scan.mzs, scan.intensities):
-                print(mz, intensity)
+        #if scan.num_peaks > 0:
+            #self._plot_scan(scan)
+            #for mz, intensity in zip(scan.mzs, scan.intensities):
+            #    print(mz, intensity)
 
     def handle_acquisition_open(self):
         print('Acquisition open')
@@ -178,91 +283,6 @@ class TopNController(Controller):
             # remove expired items from exclusion list
             self.exclusion_list = list(filter(lambda x: x.to_rt > rt, self.exclusion_list))
 
-
-    def write_mzML(self, analysis_name, out_file):
-        ms1_id_to_scan = {x.scan_id: x for x in self.scans[1]}
-        spectrum_count = self._get_spectrum_count(ms1_id_to_scan)
-
-        ms1_id_to_precursors = defaultdict(list)
-        for p in self.mass_spec.precursor_information:
-            ms1_id_to_precursors[p.precursor_scan_id].append(p)
-
-        with MzMLWriter(open(out_file, 'wb')) as out:
-
-            # add default controlled vocabularies
-            out.controlled_vocabularies()
-
-            # TODO: correctly set these fields
-            out.file_description(
-                file_contents={
-                    'MSn spectrum': '',
-                    'centroid spectrum': ''
-                },
-                source_files=[]
-            )
-            out.sample_list(samples=[])
-            out.software_list(software_list={
-                'id': 'VMS',
-                'version': '1.0.0'
-            })
-            out.scan_settings_list(scan_settings=[])
-            out.instrument_configuration_list(instrument_configurations={
-                'id': 'VMS',
-                'component_list': []
-            })
-            out.data_processing_list({'id': 'VMS'})
-
-            # open the run
-            with out.run(id=analysis_name):
-
-                # open spectrum list sections
-                with out.spectrum_list(count=spectrum_count):
-                    for ms1_id in sorted(ms1_id_to_precursors.keys()):
-                        # write ms1 scan
-                        ms1_scan = ms1_id_to_scan[ms1_id]
-                        out.write_spectrum(
-                            ms1_scan.mzs, ms1_scan.intensities,
-                            id=ms1_scan.scan_id,
-                            scan_start_time=ms1_scan.rt/60.0,
-                            params=[
-                                'MS1 Spectrum',
-                                {'ms level': 1},
-                                {'total ion current': np.sum(ms1_scan.intensities)}
-                            ])
-
-                        # get all precursor ions in this ms1 scan
-                        precursors = ms1_id_to_precursors[ms1_id]
-                        for precursor in precursors:
-                            # get all ms2 scans produced from this precursor ion
-                            ms2_scans = self.mass_spec.precursor_information[precursor]
-                            for prod in ms2_scans: # write ms2 scan information
-                                out.write_spectrum(
-                                    prod.mzs, prod.intensities,
-                                    id=prod.scan_id,
-                                    scan_start_time=prod.rt/60.0,
-                                    params=[
-                                        'MSn Spectrum',
-                                        {'ms level': 2},
-                                        {'total ion current': np.sum(prod.intensities)}
-                                    ],
-                                    # also include precursor information
-                                    precursor_information={
-                                        "mz": precursor.precursor_mz,
-                                        "intensity": precursor.precursor_intensity,
-                                        "charge": precursor.precursor_charge,
-                                        "scan_id": precursor.precursor_scan_id
-                                    })
-
-                # open chromatogram list sections
-                with out.chromatogram_list(count=1):
-                        tic_rts, tic_intensities = self._get_tic_chromatogram()
-                        out.write_chromatogram(tic_rts, tic_intensities, id='tic',
-                                               chromatogram_type='total ion current chromatogram',
-                                               time_unit='second')
-
-
-        out.close()
-
     def _exclude(self, mz, rt, exclusion_list): # TODO: make this faster?
         for x in exclusion_list:
             exclude_mz = x.from_mz < mz < x.to_mz
@@ -272,26 +292,7 @@ class TopNController(Controller):
                 return True
         return False
 
-    def _get_spectrum_count(self, ms1_id_to_scan):
-        spectrum_count = 0
-        for precursor, scans in self.mass_spec.precursor_information.items():
-            ms1_scan = ms1_id_to_scan[precursor.precursor_scan_id]
-            ms2_scans = scans
-            spectrum_count += ms1_scan.num_peaks
-            spectrum_count += np.sum([x.num_peaks for x in scans])
-        return spectrum_count
 
-    def _get_tic_chromatogram(self):
-        time_array = []
-        intensity_array = []
-        for ms1_scan in self.scans[1]:
-            time_array.append(ms1_scan.rt)
-            intensity_array.append(np.sum(ms1_scan.intensities))
-        time_array = np.array(time_array)
-        intensity_array = np.array(intensity_array)
-        return time_array, intensity_array
-
-# this is still fine
 class Kaufmann_Windows(object):
     """
     Method for creating window designs based on Kaufmann paper - https://www.ncbi.nlm.nih.gov/pubmed/27188447 
@@ -396,8 +397,6 @@ class TreeController(Controller):
         self.num_windows = num_windows
         self.min_ms2_intensity = min_ms2_intensity
 
-        mass_spec.reset()
-
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
         default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[(0, 1e3)]])
@@ -470,116 +469,3 @@ class TreeController(Controller):
 
             # set this ms1 scan as has been processed
             self.last_ms1_scan = None
-
-
-    def write_mzML(self, analysis_name, out_file):
-        ms1_id_to_scan = {x.scan_id: x for x in self.scans[1]}
-        spectrum_count = self._get_spectrum_count(ms1_id_to_scan)
-
-        ms1_id_to_precursors = defaultdict(list)
-        for p in self.mass_spec.precursor_information:
-            ms1_id_to_precursors[p.precursor_scan_id].append(p)
-
-        with MzMLWriter(open(out_file, 'wb')) as out:
-
-            # add default controlled vocabularies
-            out.controlled_vocabularies()
-
-            # TODO: correctly set these fields
-            out.file_description(
-                file_contents={
-                    'MSn spectrum': '',
-                    'centroid spectrum': ''
-                },
-                source_files=[]
-            )
-            out.sample_list(samples=[])
-            out.software_list(software_list={
-                'id': 'VMS',
-                'version': '1.0.0'
-            })
-            out.scan_settings_list(scan_settings=[])
-            out.instrument_configuration_list(instrument_configurations={
-                'id': 'VMS',
-                'component_list': []
-            })
-            out.data_processing_list({'id': 'VMS'})
-
-            # open the run
-            with out.run(id=analysis_name):
-
-                # open spectrum list sections
-                with out.spectrum_list(count=spectrum_count):
-                    for ms1_id in sorted(ms1_id_to_precursors.keys()):
-                        # write ms1 scan
-                        ms1_scan = ms1_id_to_scan[ms1_id]
-                        out.write_spectrum(
-                            ms1_scan.mzs, ms1_scan.intensities,
-                            id=ms1_scan.scan_id,
-                            scan_start_time=ms1_scan.rt/60.0,
-                            params=[
-                                'MS1 Spectrum',
-                                {'ms level': 1},
-                                {'total ion current': np.sum(ms1_scan.intensities)}
-                            ])
-
-                        # get all precursor ions in this ms1 scan
-                        precursors = ms1_id_to_precursors[ms1_id]
-                        for precursor in precursors:
-                            # get all ms2 scans produced from this precursor ion
-                            ms2_scans = self.mass_spec.precursor_information[precursor]
-                            for prod in ms2_scans: # write ms2 scan information
-                                out.write_spectrum(
-                                    prod.mzs, prod.intensities,
-                                    id=prod.scan_id,
-                                    scan_start_time=prod.rt/60.0,
-                                    params=[
-                                        'MSn Spectrum',
-                                        {'ms level': 2},
-                                        {'total ion current': np.sum(prod.intensities)}
-                                    ],
-                                    # also include precursor information
-                                    precursor_information={
-                                        "mz": precursor.precursor_mz,
-                                        "intensity": precursor.precursor_intensity,
-                                        "charge": precursor.precursor_charge,
-                                        "scan_id": precursor.precursor_scan_id
-                                    })
-
-                # open chromatogram list sections
-                with out.chromatogram_list(count=1):
-                        tic_rts, tic_intensities = self._get_tic_chromatogram()
-                        out.write_chromatogram(tic_rts, tic_intensities, id='tic',
-                                               chromatogram_type='total ion current chromatogram',
-                                               time_unit='second')
-
-
-        out.close()
-
-    def _exclude(self, mz, rt, exclusion_list): # TODO: make this faster?
-        for x in exclusion_list:
-            exclude_mz = x.from_mz < mz < x.to_mz
-            exclude_rt = x.from_rt < rt < x.to_rt
-            if exclude_mz and exclude_rt:
-                print('Excluded precursor ion', mz, rt, x)
-                return True
-        return False
-
-    def _get_spectrum_count(self, ms1_id_to_scan):
-        spectrum_count = 0
-        for precursor, scans in self.mass_spec.precursor_information.items():
-            ms1_scan = ms1_id_to_scan[precursor.precursor_scan_id]
-            ms2_scans = scans
-            spectrum_count += ms1_scan.num_peaks
-            spectrum_count += np.sum([x.num_peaks for x in scans])
-        return spectrum_count
-
-    def _get_tic_chromatogram(self):
-        time_array = []
-        intensity_array = []
-        for ms1_scan in self.scans[1]:
-            time_array.append(ms1_scan.rt)
-            intensity_array.append(np.sum(ms1_scan.intensities))
-        time_array = np.array(time_array)
-        intensity_array = np.array(intensity_array)
-        return time_array, intensity_array
