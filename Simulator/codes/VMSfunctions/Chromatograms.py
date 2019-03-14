@@ -3,6 +3,9 @@ import pandas as pd
 import scipy
 import scipy.stats
 
+import logging
+logger = logging.getLogger('Chromatograms')
+
 from VMSfunctions.Common import chromatogramDensityNormalisation
 
 
@@ -141,7 +144,7 @@ class ChromatogramCreator(object):
         chroms = []
         for i in range(len(peak_ids)):
             if i % 5000 == 0:
-                print(i)
+                logger.debug('Loading {} chromatograms'.format(i))
             pid = peak_ids[i]
             chrom = self._get_xcms_chromatograms(groups, pid)
             if chrom is not None:

@@ -1,10 +1,7 @@
 from collections import defaultdict
 
-import copy
-
 from events import Events
 
-from VMSfunctions.Chemicals import *
 from VMSfunctions.Chromatograms import *
 from VMSfunctions.Common import *
 
@@ -45,7 +42,7 @@ class Scan(object):
             return 1
 
     def __repr__(self):
-        return 'Scan %d -- num_peaks=%d rt=%.2f ms_level=%d' % (self.scan_id, self.num_peaks, self.rt, self.ms_level)
+        return 'Scan %d num_peaks=%d rt=%.2f ms_level=%d' % (self.scan_id, self.num_peaks, self.rt, self.ms_level)
 
 
 class ScanParameters(object):
@@ -65,8 +62,8 @@ class ScanParameters(object):
         else:
             return None
 
-    def deepcopy(self):
-        return copy.deepcopy(self)
+    def __repr__(self):
+        return 'ScanParameters %s' % (self.params)
 
 
 class MassSpectrometer(object):
@@ -75,6 +72,7 @@ class MassSpectrometer(object):
     ACQUISITION_STREAM_CLOSING = 'AcquisitionStreamClosing'
 
     def __init__(self, ionisation_mode):
+        self.logger = get_logger(self.__class__.__name__)
         self.ionisation_mode = ionisation_mode
 
         # following IAPI events

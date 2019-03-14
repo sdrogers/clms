@@ -1,13 +1,16 @@
-import numpy as np
+import sys
+
+import copy
 import re
 import scipy
 import scipy.stats
-import math
-import copy
 from random import sample
-import sys
 
 from VMSfunctions.ChineseRestaurantProcess import *
+from VMSfunctions.Common import *
+
+logger = get_logger('Chemicals')
+
 
 # Compound was just something I wrote to fill with the stuff I extracted from the HMBD database
 # wouldnt go into any of the stuff you are writing
@@ -215,12 +218,13 @@ class ChemicalCreator(object):
         self.crp_index = [[] for i in range(self.ms_levels)]
         self.alpha = alpha
         if self.ms_levels > 2:
-            print("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
+            raise ValueError("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
         n_ms1 = self._get_n(1)
-        print(n_ms1, " ms1 peaks to be created.")
+        logger.debug("{} ms1 peaks to be created.".format(n_ms1))
         if self.chemical_type == "Known" and compound_list != None:
             if len(compound_list)<n_ms1:
-                sys.exit('compound_list not long enough')
+                logger.warning('compound_list not long enough')
+                return
             self.formula_list = []
             compound_sample = sample(range(len(compound_list)),n_ms1)
             for formula_index in range(n_ms1):
@@ -242,7 +246,7 @@ class ChemicalCreator(object):
                 i += 1
             total += 1
             if (i/10 == math.floor(i/10)):
-                print("i = ", i, "Total = ", total)
+                logger.debug("i = {} Total = {}".format(i, total))
         return chemicals
 
     def _get_children(self, parent_ms_level, parent):

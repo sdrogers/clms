@@ -6,11 +6,12 @@ from VMSfunctions.MassSpec import *
 from VMSfunctions.Common import *
 from psims.mzml.writer import MzMLWriter
 
-
 class Controller(object):
     def __init__(self, mass_spec):
+        self.logger = get_logger(self.__class__.__name__)
         self.scans = defaultdict(list) # key: ms level, value: list of scans for that level
         self.mass_spec = mass_spec
+        self.make_plot = False
 
     def handle_scan(self, scan):
         self.scans[scan.ms_level].append(scan)
@@ -26,16 +27,17 @@ class Controller(object):
         raise NotImplementedError()
 
     def _plot_scan(self, scan):
-        plt.figure()
-        for i in range(scan.num_peaks):
-            x1 = scan.mzs[i]
-            x2 = scan.mzs[i]
-            y1 = 0
-            y2 = scan.intensities[i]
-            a = [[x1, y1], [x2, y2]]
-            plt.plot(*zip(*a), marker='', color='r', ls='-', lw=1)
-        plt.title('Scan {0} {1}s -- {2} peaks'.format(scan.scan_id, scan.rt, scan.num_peaks))
-        plt.show()
+        if self.make_plot:
+            plt.figure()
+            for i in range(scan.num_peaks):
+                x1 = scan.mzs[i]
+                x2 = scan.mzs[i]
+                y1 = 0
+                y2 = scan.intensities[i]
+                a = [[x1, y1], [x2, y2]]
+                plt.plot(*zip(*a), marker='', color='r', ls='-', lw=1)
+            plt.title('Scan {0} {1}s -- {2} peaks'.format(scan.scan_id, scan.rt, scan.num_peaks))
+            plt.show()
 
     def write_mzML(self, analysis_name, out_file):
         ms1_id_to_scan = {x.scan_id: x for x in self.scans[1]}
@@ -159,16 +161,15 @@ class SimpleMs1Controller(Controller):
 
     def handle_scan(self, scan):
         super().handle_scan(scan)
-        #if scan.num_peaks > 0:
-            #self._plot_scan(scan)
-            #for mz, intensity in zip(scan.mzs, scan.intensities):
-            #    print(mz, intensity)
+        if scan.num_peaks > 0:
+            self.logger.info('Received {}'.format(scan))
+            self._plot_scan(scan)
 
     def handle_acquisition_open(self):
-        print('Acquisition open')
+        self.logger.info('Acquisition open')
 
     def handle_acquisition_closing(self):
-        print('Acquisition closing')
+        self.logger.info('Acquisition closing')
 
     def update_parameters(self, scan):
         pass # do nothing
@@ -210,26 +211,24 @@ class TopNController(Controller):
 
         if scan.ms_level == 1: # if we get a non-empty ms1 scan
             if scan.num_peaks > 0:
-                print(scan)
+                self.logger.info('Received {}'.format(scan))
                 self.last_ms1_scan = scan
             else:
                 self.last_ms1_scan = None
 
         elif scan.ms_level == 2: # if we get ms2 scan, then do something with it
-            scan.filter_intensity(self.min_ms2_intensity)
+            # scan.filter_intensity(self.min_ms2_intensity)
             if scan.num_peaks > 0:
-                #self._plot_scan(scan)
-                for mz, intensity in zip(scan.mzs, scan.intensities):
-                    print(mz, intensity)
-                print()
+                self.logger.info('Received {}'.format(scan))
+                self._plot_scan(scan)
 
         self.update_parameters(scan)
 
     def handle_acquisition_open(self):
-        print('Acquisition open')
+        self.logger.info('Acquisition open')
 
     def handle_acquisition_closing(self):
-        print('Acquisition closing')
+        self.logger.info('Acquisition closing')
 
     def update_parameters(self, scan):
 
@@ -262,7 +261,8 @@ class TopNController(Controller):
                 mz_lower = mz * (1 - self.mz_tol / 1e6)
                 mz_upper = mz * (1 + self.mz_tol / 1e6)
                 isolation_windows = [[(mz_lower, mz_upper)]]
-                #print('Isolated precursor ion', mz, 'window', isolation_windows)
+                self.logger.debug('Isolated precursor ion {:.4f} window ({:.4f}, {:.4f})'.format(mz, \
+                    isolation_windows[0][0][0], isolation_windows[0][0][1]))
                 dda_scan_params = ScanParameters()
                 dda_scan_params.set(ScanParameters.MS_LEVEL, 2)
                 dda_scan_params.set(ScanParameters.ISOLATION_WINDOWS, isolation_windows)
@@ -273,9 +273,10 @@ class TopNController(Controller):
                 rt_lower = rt - self.rt_tol
                 rt_upper = rt + self.rt_tol
                 x = ExclusionItem(from_mz=mz_lower, to_mz=mz_upper, from_rt=rt_lower, to_rt=rt_upper)
+                self.logger.debug('Dynamic exclusion from_mz {:.4f} to_mz {:.4f} from_rt {:.2f} to_rt {:.2f}'.format(
+                    x.from_mz, x.to_mz, x.from_rt, x.to_rt
+                ))
                 self.exclusion_list.append(x)
-
-            print()
 
             # set this ms1 scan as has been processed
             self.last_ms1_scan = None
@@ -288,7 +289,7 @@ class TopNController(Controller):
             exclude_mz = x.from_mz < mz < x.to_mz
             exclude_rt = x.from_rt < rt < x.to_rt
             if exclude_mz and exclude_rt:
-                #print('Excluded precursor ion', mz, rt, x)
+                self.logger.debug('Excluded precursor ion mz {:.4f} rt {:.2f}'.format(mz, rt))
                 return True
         return False
 
@@ -311,7 +312,7 @@ class Kaufmann_Windows(object):
             self.locations.append([(bin_walls[16], bin_walls[48])])
             self.locations.append([(bin_walls[8], bin_walls[24]), (bin_walls[40], bin_walls[56])])
         else:
-            print("not a valid design")
+            raise ValueError("not a valid design")
         locations_internal = [[] for i in range(n_locations_internal + extra_bins)]
         for i in range(0, 4):
             locations_internal[0].append((bin_walls[(4 + i * 16)], bin_walls[(12 + i * 16)]))
@@ -374,7 +375,7 @@ class Dia_Windows(object):
                 internal_bin_walls_extra[0] = internal_bin_walls_extra[0] - range_slack * ms1_range_difference
                 internal_bin_walls_extra[-1] = internal_bin_walls_extra[-1] + range_slack * ms1_range_difference
         else:
-            sys.exit("Incorrect window_type selected. Must be 'even' or 'percentile'.")
+            raise ValueError("Incorrect window_type selected. Must be 'even' or 'percentile'.")
             # convert bin walls and extra bin walls into locations to scan
         if dia_design == "basic":
             self.locations = []
@@ -384,7 +385,7 @@ class Dia_Windows(object):
             self.locations = Kaufmann_Windows(internal_bin_walls, internal_bin_walls_extra, kaufmann_design,
                                               extra_bins).locations
         else:
-            sys.ext("Incorrect dia_design selected. Must be 'basic' or 'kaufmann'.")
+            raise ValueError("Incorrect dia_design selected. Must be 'basic' or 'kaufmann'.")
             
 class TreeController(Controller):
     def __init__(self, mass_spec, dia_design, window_type, kaufmann_design, extra_bins, num_windows=None, min_ms2_intensity = 0):
@@ -396,6 +397,8 @@ class TreeController(Controller):
         self.extra_bins = extra_bins
         self.num_windows = num_windows
         self.min_ms2_intensity = min_ms2_intensity
+
+        mass_spec.reset()
 
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
@@ -414,26 +417,23 @@ class TreeController(Controller):
 
         if scan.ms_level == 1: # if we get a non-empty ms1 scan
             if scan.num_peaks > 0:
-                print(scan)
+                self.logger.info('Received MS1 scan {}'.format(scan))
                 self.last_ms1_scan = scan
             else:
                 self.last_ms1_scan = None
 
         elif scan.ms_level == 2: # if we get ms2 scan, then do something with it
-            scan.filter_intensity(self.min_ms2_intensity)
             if scan.num_peaks > 0:
+                self.logger.info('Received MS2 scan {}'.format(scan))
                 self._plot_scan(scan)
-                for mz, intensity in zip(scan.mzs, scan.intensities):
-                    print(mz, intensity)
-                print()
 
         self.update_parameters(scan)
 
     def handle_acquisition_open(self):
-        print('Acquisition open')
+        self.logger.info('Acquisition open')
 
     def handle_acquisition_closing(self):
-        print('Acquisition closing')
+        self.logger.info('Acquisition closing')
 
     def update_parameters(self, scan):
 
@@ -446,26 +446,13 @@ class TreeController(Controller):
             mzs = self.last_ms1_scan.mzs
             default_range = [(0, 1e3)] # TODO: this should maybe come from somewhere else?
             locations = Dia_Windows(mzs, default_range, self.dia_design, self.window_type, self.kaufmann_design, self.extra_bins,self.num_windows).locations
-            print(locations)
+            self.logger.debug('Window locations {}'.format(locations))
             for i in range(len(locations)): # define isolation window around the selected precursor ions
-
-                #if self.mass_spec.ionisation_mode == POSITIVE:
-                #    precursor_charge = +1 # assume it's all +1 if positive
-                #elif self.mass_spec.ionisation_mode == NEGATIVE:
-                #    precursor_charge = -1
-
-                #precursor = Precursor(precursor_mz=mz, precursor_intensity=intensity,
-                #                      precursor_charge=precursor_charge, precursor_scan_id=self.last_ms1_scan.scan_id)
-
                 isolation_windows = locations[i]
-                #print('Isolated precursor ion', mz, 'window', isolation_windows)
                 dda_scan_params = ScanParameters()
                 dda_scan_params.set(ScanParameters.MS_LEVEL, 2)
                 dda_scan_params.set(ScanParameters.ISOLATION_WINDOWS, isolation_windows)
-                #dda_scan_params.set(ScanParameters.PRECURSOR, precursor)
                 self.mass_spec.add_to_queue(dda_scan_params) # push this dda scan to the mass spec queue
-
-            print()
 
             # set this ms1 scan as has been processed
             self.last_ms1_scan = None

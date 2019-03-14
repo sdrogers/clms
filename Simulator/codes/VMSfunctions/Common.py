@@ -1,4 +1,6 @@
 import pickle
+import logging
+
 from sklearn.externals import joblib
 
 # some useful constants
@@ -67,3 +69,22 @@ def adductTransformation(mz, adduct):
     else:
         return None
     # turn this into a proper function
+
+
+def get_logger(name, level=logging.DEBUG):
+    # turn off annoying matplotlib messages
+    if level == logging.DEBUG:
+        mpl_logger = logging.getLogger('matplotlib')
+        mpl_logger.setLevel(logging.WARNING)
+    # initalise basic config for all loggers
+    logging.basicConfig(level=level)
+    logger = logging.getLogger(name)
+    return logger
+
+
+def set_log_level_info():
+    logging.getLogger().setLevel(logging.INFO)
+
+
+def set_log_level_debug():
+    logging.getLogger().setLevel(logging.DEBUG)
