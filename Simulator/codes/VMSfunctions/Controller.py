@@ -396,6 +396,8 @@ class TreeController(Controller):
         self.num_windows = num_windows
         self.min_ms2_intensity = min_ms2_intensity
 
+        mass_spec.reset()
+
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
         default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[(0, 1e3)]])
