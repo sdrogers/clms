@@ -121,7 +121,7 @@ class ChromatogramCreator(object):
             selected = np.random.choice(len(self.chromatograms), 1)[0]
             return self.chromatograms[selected]
         elif self.chromatograms != None and intensity is not None:
-            diff = [(abs(self.max_intensities[i] - myNumber)) for i in range(len(self.max_intensities))]
+            diff = [(abs(self.max_intensities[i] - intensity)) for i in range(len(self.max_intensities))]
             return self.chromatograms[np.argmin(diff)]
         else:
             NotImplementedError("Functional Chromatograms not implemented here yet")
