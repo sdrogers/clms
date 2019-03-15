@@ -119,20 +119,20 @@ class ChromatogramCreator(object):
             self.max_intensities.append(max(self.chromatograms[i].raw_intensities))
         self.max_intensities = np.array(self.max_intensities)
         idx = np.argsort(self.max_intensities)
-        self.chromatograms = self.chromatograms[idx]
-        self.max_intensities = self.max_intensities[idx]
+        self.chromatograms = np.array(self.chromatograms)[idx].tolist()
+        self.max_intensities = self.max_intensities[idx].tolist()
 
     def sample(self, intensity = None):
         if self.chromatograms is not None and intensity == None:
             selected = np.random.choice(len(self.chromatograms), 1)[0]
             return self.chromatograms[selected]
         elif self.chromatograms is not None and intensity is not None:
-            return takeClosest(self.max_intensities, intensity)
+            return self.chromatograms[takeClosest(self.max_intensities, intensity)]
         else:
             NotImplementedError("Functional Chromatograms not implemented here yet")
 
     def _load_chromatograms(self, xcms_output):
-        return np.array(self._load_xcms_df(xcms_output))
+        return self._load_xcms_df(xcms_output)
 
     def _load_xcms_df(self, df_file):
         """

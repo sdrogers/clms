@@ -86,9 +86,9 @@ def takeClosest(myList, myNumber):
     before = myList[pos - 1]
     after = myList[pos]
     if after - myNumber < myNumber - before:
-        return after
+        return pos
     else:
-        return before
+        return pos - 1
 
 
 def get_logger(name, level=logging.DEBUG):
