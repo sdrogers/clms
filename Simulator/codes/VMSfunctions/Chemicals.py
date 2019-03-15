@@ -77,7 +77,6 @@ class Isotopes(object):
         # TODO: Add fucntionality for elements other than Carbon
 
     def get_isotopes(self, total_proportion):
-        # update this to work properly
         peaks = [() for i in range(len(self._get_isotope_proportions(total_proportion)))]
         for i in range(len(peaks)):
             peaks[i] += (self._get_isotope_mz(self._get_isotope_names(i)),)
@@ -105,15 +104,14 @@ class Isotopes(object):
         if isotope == "Mono":
             return self.formula._get_mz()
         elif isotope[-3:] == "C13":
-            return self.formula._get_mz() - float(isotope.split("C13")[0]) * self.mz_diff
+            return self.formula._get_mz() + float(isotope.split("C13")[0]) * self.mz_diff
         else:
             return None
-            # turn this into a proper function
 
 
 class Adducts(object):
     def __init__(self, formula):
-        self.adduct_names = ["M+H", "[M+ACN]+H", "[M+CH3OH]+H", "[M+NH3]+H"]  # TODO: remove eventually
+        self.adduct_names = ["M+H", "[M+ACN]+H", "[M+CH3OH]+H", "[M+NH3]+H"]  # TODO: add other options
         self.formula = formula
 
     def get_adducts(self):
@@ -126,8 +124,7 @@ class Adducts(object):
 
     def _get_adduct_proportions(self):
         # TODO: replace this with something proper
-        proportions = np.random.binomial(1, 0.1, 3) * np.random.uniform(0.1, 0.2, 3)
-        proportions = [1 - sum(proportions)] + proportions.tolist()
+        proportions = np.random.dirichlet([1,0.1,0.1,0.1]).tolist()
         return proportions
 
     def _get_adduct_names(self):
@@ -219,7 +216,7 @@ class ChemicalCreator(object):
         self.alpha = alpha
         self.counts = []
         if self.ms_levels > 2:
-            raise ValueError("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
+            print("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
         n_ms1 = self._get_n(1)
         logger.debug("{} ms1 peaks to be created.".format(n_ms1))
         if self.chemical_type == "Known" and compound_list != None:
