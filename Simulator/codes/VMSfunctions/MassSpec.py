@@ -184,7 +184,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
         for i in range(len(self.chemicals)):
             chemical = self.chemicals[i]
 
-            # mzs is a list of (mz, intensity) for the different adduct/isotopes combinations of a chemical
+            # mzs is a list of (mz, intensity) for the different adduct/isotopes combinations of a chemical            
             mzs = self._get_all_mz_peaks(chemical, scan_time, ms_level, isolation_windows)
 
             if mzs is not None:
@@ -199,13 +199,12 @@ class IndependentMassSpectrometer(MassSpectrometer):
                     density=self.density)
 
     def _get_all_mz_peaks(self, chemical, query_rt, ms_level, isolation_windows):
-
         if not self._rt_match(chemical, query_rt):
             return None
         mz_peaks = []
         for which_isotope in range(len(chemical.isotopes)):
             for which_adduct in range(len(self._get_adducts(chemical))):
-                mz_peaks.extend(self._get_mz_peaks(chemical, query_rt, ms_level, isolation_windows, which_isotope, which_adduct))
+                mz_peaks.extend(self._get_mz_peaks(chemical, query_rt, ms_level, isolation_windows, which_isotope, which_adduct))       
         if mz_peaks == []:
             return None
         else:
@@ -255,7 +254,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
             intensity = chemical.isotopes[which_isotope][1] * self._get_adducts(chemical)[which_adduct][1] * \
                         chemical.max_intensity
             return intensity * chemical.chromatogram.get_relative_intensity(query_rt - chemical.rt)
-        else:
+        else:               
             return self._get_intensity(chemical.parent, query_rt, which_isotope, which_adduct) * \
                    chemical.parent_mass_prop * chemical.prop_ms2_mass
 

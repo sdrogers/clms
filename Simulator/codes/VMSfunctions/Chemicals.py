@@ -266,12 +266,10 @@ class ChemicalCreator(object):
                         if children_ms_level < self.ms_levels:
                             kid.children = self._get_children(children_ms_level, kid)
                         self.crp_samples[children_ms_level - 1].append(kid)
-                    if children_ms_level < self.ms_levels:
-                        # this isnt slow bit
+                    else:
                         kid = copy.deepcopy(self.crp_samples[children_ms_level - 1][next_crp])
                         kid.parent_mass_prop = self._get_parent_mass_prop(children_ms_level)
-                    else:
-                        kid = self.crp_samples[children_ms_level-1][next_crp]
+                        kid.parent = parent
                     kids.append(kid)
                 self.crp_samples[children_ms_level-1].extend(kids)
             else:
