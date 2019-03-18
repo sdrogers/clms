@@ -7,6 +7,7 @@ import scipy.stats
 
 logger = logging.getLogger('Chromatograms')
 from VMSfunctions.Common import *
+from VMSfunctions.Chemicals import *
 
 class Chromatogram(object):
 
@@ -108,116 +109,49 @@ class FunctionalChromatogram(Chromatogram):
 
 
 class ChromatogramCreator(object):
-    def __init__(self, xcms_output=None):
-        self.xcms_output = xcms_output
-        if self.xcms_output != None:
-            self.chromatograms = self._load_chromatograms(self.xcms_output)
-        else:
-            self.chromatograms = None
-        self.max_intensities = []
-        for i in range(len(self.chromatograms)):
-            self.max_intensities.append(max(self.chromatograms[i].raw_intensities))
-        self.max_intensities = np.array(self.max_intensities)
-        idx = np.argsort(self.max_intensities)
-        self.chromatograms = np.array(self.chromatograms)[idx].tolist()
-        self.max_intensities = self.max_intensities[idx].tolist()
+    def __init__(self, xcms_output):
+        # load the chromatograms and sort by intensity ascending
+        chromatograms, chemicals = self._load_chromatograms(xcms_output)
+        max_intensities = np.array([max(c.raw_intensities) for c in chromatograms])
+        idx = np.argsort(max_intensities)
+        self.chromatograms = chromatograms[idx]
+        self.max_intensities = max_intensities[idx]
+        self.chemicals = chemicals
 
     def sample(self, intensity = None):
-        if self.chromatograms is not None and intensity == None:
+        """
+        Samples a chromatogram
+        :param intensity: the intensity to select the closest chromatogram
+        :return: a Chromatogram object
+        """
+        if intensity == None: # randomly sample chromatograms
             selected = np.random.choice(len(self.chromatograms), 1)[0]
-            return self.chromatograms[selected]
-        elif self.chromatograms is not None and intensity is not None:
-            return self.chromatograms[takeClosest(self.max_intensities, intensity)]
-        else:
-            NotImplementedError("Functional Chromatograms not implemented here yet")
+        else: # find the chromatogram closest to the intensity
+            selected = takeClosest(self.max_intensities, intensity)
+        return self.chromatograms[selected]
 
     def _load_chromatograms(self, xcms_output):
-        return self._load_xcms_df(xcms_output)
-
-    def _load_xcms_df(self, df_file):
         """
         Load CSV file of chromatogram information exported by the XCMS script 'process_data.R'
         :param df_file: the input csv file exported by the script (in gzip format)
         :return: a list of Chromatogram objects
         """
-        df = pd.read_csv(df_file, compression='gzip')
+        df = pd.read_csv(xcms_output, compression='gzip')
         peak_ids = df.id.unique()
         groups = df.groupby('id')
         chroms = []
+        chems = []
         for i in range(len(peak_ids)):
             if i % 5000 == 0:
                 logger.debug('Loading {} chromatograms'.format(i))
             pid = peak_ids[i]
-            chrom = self._get_xcms_chromatograms(groups, pid)
-            if chrom is not None:
+            chrom, chem = self._get_xcms_chromatograms(groups, pid)
+            if len(chrom.rts) > 1:  # chromatograms should have more than one single data point
                 chroms.append(chrom)
-        return chroms
+                chems.append(chem)
+        return np.array(chroms), np.array(chems)
 
     def _get_xcms_chromatograms(self, groups, pid):
-        selected = groups.get_group(pid)
-        rts = self._get_values(selected, 'rt_values')
-        mzs = self._get_values(selected, 'mz_values')
-        intensities = self._get_values(selected, 'intensity_values')
-        assert len(rts) == len(mzs)
-        assert len(rts) == len(intensities)
-        if len(rts) > 1:
-            chrom = EmpiricalChromatogram(rts, mzs, intensities)
-        else:
-            chrom = None
-        return chrom
-
-    def _get_values(self, df, column_name):
-        return df[column_name].values
-
-
-class ChromatogramLoader(object):
-    """
-    Loads unknown chemicals and chromatogram data exported from the R script.
-    Assumes 1 unknown chemical == 1 chromatogram.
-    """
-    def __init__(self, xcms_output, min_ms1_intensity, min_rt, max_rt):
-        self.min_ms1_intensity = min_ms1_intensity
-        self.min_rt = min_rt
-        self.max_rt = max_rt
-        self.observed_chemicals = self._load_xcms_df(xcms_output)
-        self.observed_chromatograms = [x.chromatogram for x in self.observed_chemicals]
-
-    def _load_xcms_df(self, df_file):
-        """
-        Load CSV file of chromatogram information exported by the XCMS script 'process_data.R'
-        :param df_file: the input csv file exported by the script (in gzip format)
-        :return: a list of Chromatogram objects
-        """
-        df = pd.read_csv(df_file, compression='gzip')
-        peak_ids = df.id.unique()
-        groups = df.groupby('id')
-        chemicals = []
-        print('Processing exported chromatograms')
-        for i in range(len(peak_ids)):
-            if i % 5000 == 0:
-                print(i)
-            pid = peak_ids[i]
-            chem = self._get_chemical(groups, pid)
-            if chem is not None and self._valid_chem(chem):
-                chemicals.append(chem)
-        print('Loaded %d UnknownChemicals/Chromatograms' % len(chemicals))
-        return chemicals
-
-    def sample(self): # TODO: add filters here
-        if self.chromatograms != None:
-            selected = np.random.choice(len(self.chromatograms), 1)[0]
-            return self.chromatograms[selected]
-        else:
-            NotImplementedError("Functional Chromatograms not implemented here yet")
-
-    def _get_chemical(self, groups, pid):
-        """
-        Constructs an EmpiricalChromarogram object from groups in the dataframe.
-        :param groups: pandas group object, produced from df.groupby('id'), i.e. each group is a set of rows
-        grouped by the 'id' column in the dataframe.
-        :param pid: the peak id
-        :return: an MS1 chromatographic peak object
-        """
         selected = groups.get_group(pid)
         mz = self._get_value(selected, 'mz')
         rt = self._get_value(selected, 'rt')
@@ -227,24 +161,12 @@ class ChromatogramLoader(object):
         intensities = self._get_values(selected, 'intensity_values')
         assert len(rts) == len(mzs)
         assert len(rts) == len(intensities)
-        if len(rts) > 1:
-            chrom = EmpiricalChromatogram(rts, mzs, intensities)
-            chem = UnknownChemical(mz, rt, max_intensity, chrom, None)
-        else:
-            chem = None
-        return chem
-
-    def _valid_chem(self, chem):
-        if chem.max_intensity < self.min_ms1_intensity:
-            return False
-        elif chem.rt < self.min_rt:
-            return False
-        elif chem.rt > self.max_rt:
-            return False
-        return True
-
-    def _get_value(self, df, column_name):
-        return self._get_values(df, column_name)[0]
+        chrom = EmpiricalChromatogram(rts, mzs, intensities)
+        chem = UnknownChemical(mz, rt, max_intensity, chrom, None)
+        return chrom, chem
 
     def _get_values(self, df, column_name):
         return df[column_name].values
+
+    def _get_value(self, df, column_name):
+        return self._get_values(df, column_name)[0]
