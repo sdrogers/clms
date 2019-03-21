@@ -80,9 +80,9 @@ def takeClosest(myList, myNumber):
     """
     pos = bisect_left(myList, myNumber)
     if pos == 0:
-        return myList[0]
+        return 0
     if pos == len(myList):
-        return myList[-1]
+        return -1
     before = myList[pos - 1]
     after = myList[pos]
     if after - myNumber < myNumber - before:

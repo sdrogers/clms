@@ -200,7 +200,6 @@ class ChemicalCreator(object):
 
     def sample(self, min_rt, max_rt, min_ms1_intensity, n_ms1_peaks, ms_levels=2, chemical_type=None, chromatogram_type="Empirical",
                formula_list=None, use_chrom_tuple=False, compound_list=None, alpha=math.inf):
-        # TODO: Speed this up!
         self.n_ms1_peaks = n_ms1_peaks
         self.ms_levels = ms_levels
         self.chemical_type = chemical_type
@@ -232,12 +231,10 @@ class ChemicalCreator(object):
         i = 0
         total = 0
         while len(chemicals) < n_ms1:
-            sampled_peak = self.peak_sampler.sample(ms_level=1, n_peaks=1)
             if self.chemical_type == "Known":
                 formula = self.formula_list[i]
-            chem = self._get_chemical(1, formula, None, sampled_peak[0])
-            #chem.chromatogram = self.chromatograms.chromatograms[0]
-            chem.chromatogram = self.chromatograms.sample(chem.max_intensity)
+            chrom = self.chromatograms.sample(chem.max_intensity)
+            chem = self._get_chemical(1, formula, chrom)
             # TODO: add cut-off into density estimator (rt_range, intensity_min, mz_range)
             if chem is not None and self._valid_ms1_chem(chem): # once TODO is done, can remove this line and total
                 chem.children = self._get_children(1, chem)
@@ -299,29 +296,29 @@ class ChemicalCreator(object):
         else:
             return int(math.floor(self.peak_sampler.density_estimator.n_peaks(2, 1) / (5**(ms_level-2))))
 
-    def _get_chemical(self, ms_level, formula, chromatogram, sampled_peak):
+    def _get_chemical(self, ms_level, formula, chromatogram):
         if formula != None:
-            return self._get_known_ms1(formula, chromatogram, sampled_peak)
+            return self._get_known_ms1(formula, chromatogram)
         else:
-            return self._get_unknown_msn(ms_level, chromatogram, sampled_peak)
+            return self._get_unknown_msn(ms_level, chromatogram)
 
-    def _get_known_ms1(self, formula, chromatogram, sampled_peak):
-        mz = self._get_mz(1, chromatogram, sampled_peak)
-        rt = self._get_rt(chromatogram, sampled_peak)
-        intensity = self._get_intensity(chromatogram, sampled_peak)
+    def _get_known_ms1(self, formula, chromatogram):
+        mz = self._get_mz(1, chromatogram)
+        rt = self._get_rt(chromatogram)
+        intensity = self._get_intensity(chromatogram)
         formula = Formula(formula)
         isotopes = Isotopes(formula)
         adducts = Adducts(formula)
         return KnownChemical(formula, isotopes, adducts, rt, intensity, chromatogram, None)
 
-    def _get_unknown_msn(self, ms_level, chromatogram, sampled_peak, parent=None):
+    def _get_unknown_msn(self, ms_level, chromatogram, parent=None):
         if ms_level == 1:
-            mz = self._get_mz(1, chromatogram, sampled_peak)
-            rt = self._get_rt(chromatogram, sampled_peak)
-            intensity = self._get_intensity(chromatogram, sampled_peak)
+            mz = self._get_mz(1, chromatogram)
+            rt = self._get_rt(chromatogram)
+            intensity = self._get_intensity(chromatogram)
             return UnknownChemical(mz, rt, intensity, chromatogram, None)
         else:
-            mz = self._get_mz(ms_level, chromatogram, sampled_peak)
+            mz = self._get_mz(ms_level, chromatogram)
             parent_mass_prop = self._get_parent_mass_prop(ms_level)
             prop_ms2_mass = None
             return MSN(mz, ms_level, prop_ms2_mass, parent_mass_prop, None, parent)
@@ -330,9 +327,8 @@ class ChemicalCreator(object):
         return np.random.uniform(0.5, 0.9, 1).tolist()[0]
         # TODO: this needs to come from a density
 
-    def _get_mz(self, ms_level, chromatogram, sampled_peak):
-        # TODO: work out what the hell this is
-        # not sure what I meant this to do
+    def _get_mz(self, ms_level, chromatogram):
+        # TODO: FIX THIS
         if chromatogram == None and sampled_peak == None:
             if ms_level == 2:
                 return self.peak_sampler.sample(ms_level, 1)[0].mz
@@ -341,23 +337,20 @@ class ChemicalCreator(object):
         elif self.use_chrom_tuple == False:
             return sampled_peak.mz
         else:
-            NotImplementedError()
-            # TODO: extract same stuff from chromatogram
+            return sum(chromatogram.raw_mzs) / len(chromatogram.raw_mzs)
 
-    def _get_rt(self, chromatogram, sampled_peak):
+    def _get_rt(self, chromatogram):
         if self.use_chrom_tuple == False:
-            return sampled_peak.rt
+            return chromatogram.raw_rts[0]
         else:
-            NotImplementedError()
-            # TODO: extract same stuff from chromatogram
+            self.peak_sampler.sample(ms_level=1, n_peaks=1).rt
 
     def _get_intensity(self, chromatogram, sampled_peak):
         if self.use_chrom_tuple == False:
-            return sampled_peak.intensity
+            return self.peak_sampler.sample(ms_level=1, n_peaks=1).intensity
         else:
-            NotImplementedError()
-            # TODO: extract same stuff from chromatogram
-
+            return max(chromatogram.raw_intensities)
+        
     def _valid_ms1_chem(self, chem):
         if chem.max_intensity < self.min_ms1_intensity:
             return False

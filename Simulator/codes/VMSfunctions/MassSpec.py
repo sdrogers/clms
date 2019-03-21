@@ -212,15 +212,15 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
     def _get_mz_peaks(self, chemical, query_rt, ms_level, isolation_windows, which_isotope, which_adduct):
         mz_peaks = []
-        if ms_level == 1 and chemical.ms_level == 1:
+        if ms_level == 1 and chemical.ms_level == 1: # fragment ms1 peaks
             if not (which_isotope > 0 and which_adduct > 0):
                 if self._isolation_match(chemical, query_rt, isolation_windows[0], which_isotope, which_adduct):
                     intensity = self._get_intensity(chemical, query_rt, which_isotope, which_adduct)
                     mz = self._get_mz(chemical, query_rt, which_isotope, which_adduct)
                     mz_peaks.extend([(mz, intensity)])
         elif ms_level > 1 and which_isotope > 0:
-            pass
-        elif ms_level == chemical.ms_level:
+            pass # TODO: we need to deal with msN fragmentation of non-monoisotopic peaks?
+        elif ms_level == chemical.ms_level: # fragment MSn peaks
             intensity = self._get_intensity(chemical, query_rt, which_isotope, which_adduct)
             mz = self._get_mz(chemical, query_rt, which_isotope, which_adduct)
             return [(mz, intensity)]
