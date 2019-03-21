@@ -1,16 +1,16 @@
 import glob
 import math
+import os
 from collections import defaultdict
 
-import pandas as pd
 import numpy as np
-import os
 import pylab as plt
 import pymzml
 from sklearn.neighbors import KernelDensity
 
-from .Common import MZ, RT, INTENSITY, N_PEAKS, MZ_INTENSITY, SCAN_DURATION
+from VMSfunctions.Common import *
 
+logger = get_logger('DataGenerator')
 
 class PeakSample(object):
     """
@@ -258,17 +258,33 @@ class PeakSampler(object):
     def __init__(self, density_estimator):
         self.density_estimator = density_estimator
 
-    def sample(self, ms_level, n_peaks=None):
+    def sample(self, ms_level, n_peaks=None, min_mz=None, max_mz=None, min_rt=None, max_rt=None, min_intensity=None):
         if n_peaks is None:
             n_peaks = max(self.density_estimator.n_peaks(ms_level, 1).astype(int)[0][0], 0)
 
         peaks = []
-        while (len(peaks) < n_peaks):
+        while len(peaks) < n_peaks:
             vals = self.density_estimator.sample(ms_level, 1)
             intensity = np.exp(vals[0, 1])
-            if intensity > 0:
-                mz = vals[0, 0]
-                rt = vals[0, 2]
-                p = PeakSample(mz, rt, intensity, ms_level)
+            mz = vals[0, 0]
+            rt = vals[0, 2]
+            p = PeakSample(mz, rt, intensity, ms_level)
+            if self._is_valid(p, min_mz, max_mz, min_rt, max_rt, min_intensity): # othwerise we just keep rejecting
                 peaks.append(p)
+                logger.debug('Sampling peak {}/{}'.format(len(peaks), n_peaks))
         return peaks
+
+    def _is_valid(self, peak, min_mz, max_mz, min_rt, max_rt, min_intensity):
+        if peak.intensity < 0:
+            return False
+        if min_mz is not None and min_mz > peak.mz:
+            return False
+        if max_mz is not None and max_mz < peak.mz:
+            return False
+        if min_rt is not None and min_rt > peak.rt:
+            return False
+        if max_rt is not None and max_rt < peak.rt:
+            return False
+        if min_intensity is not None and min_intensity > peak.intensity:
+            return False
+        return True
