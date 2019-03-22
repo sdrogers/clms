@@ -350,3 +350,12 @@ class ChemicalCreator(object):
     def _get_parent_mass_prop(self, ms_level):
         return np.random.uniform(0.5, 0.9, 1).tolist()[0]
         # TODO: this needs to come from a density
+
+    def _valid_ms1_chem(self, chem):
+        if chem.max_intensity < self.min_ms1_intensity:
+            return False
+        elif chem.rt < self.min_rt:
+            return False
+        elif chem.rt > self.max_rt:
+            return False
+        return True
