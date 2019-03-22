@@ -1,6 +1,6 @@
 # needs xcms3, see https://bioconductor.org/packages/release/bioc/html/xcms.html for installation
 library(xcms)
-
+library(tidyverse)
 ### some useful functions ###
 
 getDesign = function(mzml_files, label) {
@@ -156,6 +156,79 @@ write_df <- function(df, filename) {
   write.csv(df, file = gzfile(filename), row.names = FALSE)  
 }
 
+get_scanrange <- function(scanrange) {
+  if (length(scanrange) < 2) {
+    scanrange <- c(1, length(object@scantime))
+  }
+  else {
+    scanrange <- range(scanrange)
+  }
+  if (min(scanrange) < 1 | max(scanrange) > length(object@scantime)) {
+    scanrange[1] <- max(1, scanrange[1])
+    scanrange[2] <- min(length(object@scantime), scanrange[2])
+    message("Provided scanrange was adjusted to ", scanrange)
+  }
+  scanrange
+}
+
+
+get_regions_of_interest = function(object, ppm = 25, peakwidth = c(20, 50), snthresh = 10, prefilter = c(3, 100), mzCenterFun = "wMean",
+                        integrate = 1, mzdiff = -0.001, fitgauss = FALSE, noise = 0,
+                        sleep = 0, verboseColumns = FALSE, roiList = list(), firstBaselineCheck = TRUE,
+                        roiScales = NULL) {
+  args <- list(X = 1:length(fileNames(object)),
+               FUN = filterFile, object = object)
+  applied_args = do.call("lapply", args)
+  df = map_dfr(applied_args, function(x) get_region_of_interest(x, ppm, peakwidth, snthresh, prefilter, mzCenterFun, integrate, mzdiff,
+                                                                fitgauss, noise, sleep, verboseColumns, roiList, firstBaselineCheck, roiScales))
+  return(df)
+  }
+
+
+get_region_of_interest <- function(object, ppm = 25, peakwidth = c(20, 50), snthresh = 10, prefilter = c(3, 100), mzCenterFun = "wMean",
+                                   integrate = 1, mzdiff = -0.001, fitgauss = FALSE, noise = 0,
+                                   sleep = 0, verboseColumns = FALSE, roiList = list(), firstBaselineCheck = TRUE,
+                                   roiScales = NULL) {
+  x = xcms::spectra(object, BPPARAM = SerialParam())
+  rt = rtime(object)
+  mzs <- lapply(x, mz)
+  vals_per_spect <- lengths(mzs, FALSE)
+
+  mz = unlist(mzs, use.names = FALSE)
+  int = unlist(lapply(x, xcms::intensity), use.names = FALSE)
+  valsPerSpect = vals_per_spect
+  scantime = rt
+
+  df = centWave_new_modified(mz=mz, int=int, scantime=scantime, valsPerSpect=valsPerSpect, ppm=ppm, peakwidth=peakwidth, snthresh=snthresh,
+                             prefilter=prefilter, mzCenterFun=mzCenterFun,integrate=integrate, mzdiff=mzdiff, fitgauss=fitgauss,
+                             noise=noise, sleep=sleep, roiList=roiList, firstBaselineCheck=firstBaselineCheck, roiScales=roiScales)
+  return(df)
+}
+
+get_all_ROIs <- function() {
+  mzml_files = '/Users/ronan/University of Glasgow/Vinny Davies - CLDS Metabolomics Project/Beers_4Beers_compared/Positive/samples/mzML_all/Beer_QC_full1.mzML'
+  design = data.frame(sample_name='Beer_QC_full1',sample_group=factor('group1'),stringsAsFactors = F)
+
+  files = c('Beer_1_full1.mzML', 'Beer_1_full2.mzML', 'Beer_1_full3.mzML',
+            'Beer_2_full1.mzML', 'Beer_2_full2.mzML', 'Beer_2_full3.mzML',
+            'Beer_3_full1.mzML', 'Beer_3_full2.mzML', 'Beer_3_full3.mzML',
+            'Beer_QC_full1.mzML', 'Beer_QC_full2.mzML', 'Beer_QC_full3.mzML')
+  files = c('Beer_1_full1.mzML')
+  mzml_files = paste0('/Users/ronan/University of Glasgow/Vinny Davies - CLDS Metabolomics Project/Beers_4Beers_compared/Positive/samples/mzML_all/', files)
+  design = data.frame(sample_name=files,sample_group=factor(rep('group1', length(files))),stringsAsFactors = F)
+
+  raw_data <- readData(mzml_files, design, mode='onDisk')
+  pos_df = get_regions_of_interest(raw_data, ppm=ppm, peakwidth=peakwidth, snthresh=snthresh, prefilter=prefilter, mzdiff=mzdiff)
+  pos_df$mode = rep('Positive', nrow(pos_df))
+
+  mzml_files = paste0('/Users/ronan/University of Glasgow/Vinny Davies - CLDS Metabolomics Project/Beers_4Beers_compared/negative/Samples/', files)
+  raw_data <- readData(mzml_files, design, mode='onDisk')
+  neg_df = get_regions_of_interest(raw_data, ppm=ppm, peakwidth=peakwidth, snthresh=snthresh, prefilter=prefilter, mzdiff=mzdiff)
+  neg_df$mode = rep('Positive', nrow(df))
+
+  write_csv(pos_df, 'rois.csv')
+}
+
 #### end ####
 
 
@@ -179,3 +252,6 @@ ms1_features <- extract_features(data, mzppm, make_plot)
 df = get_df(ms1_features)
 #write_df(df, 'beer_ms1_peaks.csv.gz')
 
+# Testing ROI picking
+raw_data <- readData(mzml_files, design, mode='onDisk')
+get_regions_of_interest(raw_data, ppm=ppm, peakwidth=peakwidth, prefilter=prefilter, scanrange, noise)

@@ -437,3 +437,4 @@ ASALocalRun/
 # Ignore big test data files
 test_data/*
 
+.Rproj.user
