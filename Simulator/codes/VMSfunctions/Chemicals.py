@@ -239,8 +239,11 @@ class ChemicalCreator(object):
                 logger.debug("i = {} Total = {}".format(i, total))
         return chemicals        
         
-    def sample_from_chromatograms(self, ms_levels=2):
+    def sample_from_chromatograms(self, min_rt, max_rt, min_ms1_intensity, ms_levels=2):
         self.ms_levels = ms_levels
+        self.min_rt = min_rt
+        self.max_rt = max_rt
+        self.min_ms1_intensity = min_ms1_intensity
         self.crp_samples = [[] for i in range(self.ms_levels)]
         self.crp_index = [[] for i in range(self.ms_levels)]
         self.alpha = math.inf
@@ -252,12 +255,12 @@ class ChemicalCreator(object):
         logger.debug("{} ms1 peaks to be created.".format(n_ms1))
         chemicals = []
         for i in range(len(self.chromatograms.chromatograms)):
-            chrom = self.chromatograms.chromatograms[i]
             chem = self.chromatograms.chemicals[i]
-            chem.children = self._get_children(1, chem)
-            chemicals.append(chem)
-            if (i/2500 == math.floor(i/2500)):
-                logger.debug("i = {}".format(i))
+            if self._valid_ms1_chem(chem):
+                chem.children = self._get_children(1, chem)
+                chemicals.append(chem)
+                if i % 2500 == 0:
+                    logger.debug("i = {}".format(i))
         return chemicals
     
     def _sample_formulae(self, n_ms1):
