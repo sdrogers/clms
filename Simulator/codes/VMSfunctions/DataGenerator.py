@@ -271,7 +271,6 @@ class PeakSampler(object):
             p = PeakSample(mz, rt, intensity, ms_level)
             if self._is_valid(p, min_mz, max_mz, min_rt, max_rt, min_intensity): # othwerise we just keep rejecting
                 peaks.append(p)
-                logger.debug('Sampling peak {}/{}'.format(len(peaks), n_peaks))
         return peaks
 
     def _is_valid(self, peak, min_mz, max_mz, min_rt, max_rt, min_intensity):
