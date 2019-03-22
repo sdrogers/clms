@@ -85,11 +85,11 @@ Precursor = namedtuple('Precursor', 'precursor_mz precursor_intensity precursor_
 
 
 class TopNController(Controller):
-    def __init__(self, mass_spec, N, mz_tol, rt_tol, exclusion_list=None, min_ms2_intensity=0):
+    def __init__(self, mass_spec, N, isolation_window, rt_tol, exclusion_list=None, min_ms2_intensity=0):
         super().__init__(mass_spec)
         self.last_ms1_scan = None
         self.N = N
-        self.mz_tol = mz_tol  # the m/z window around a precursor ion to be fragmented
+        self.isolation_window = isolation_window  # the isolation window (in Dalton) around a precursor ion to be fragmented
         self.rt_tol = rt_tol  # the rt window to prevent the same precursor ion to be fragmented again
         if exclusion_list is None:
             exclusion_list = []
@@ -159,8 +159,10 @@ class TopNController(Controller):
                 precursor = Precursor(precursor_mz=mz, precursor_intensity=intensity,
                                       precursor_charge=precursor_charge, precursor_scan_id=self.last_ms1_scan.scan_id)
 
-                mz_lower = mz * (1 - self.mz_tol / 1e6)
-                mz_upper = mz * (1 + self.mz_tol / 1e6)
+                # mz_lower = mz * (1 - self.mz_tol / 1e6)
+                # mz_upper = mz * (1 + self.mz_tol / 1e6)
+                mz_lower = mz - self.isolation_window
+                mz_upper = mz + self.isolation_window
                 isolation_windows = [[(mz_lower, mz_upper)]]
                 self.logger.debug('Isolated precursor ion {:.4f} window ({:.4f}, {:.4f})'.format(mz, \
                                                                                                  isolation_windows[0][
@@ -173,7 +175,7 @@ class TopNController(Controller):
                 dda_scan_params.set(ScanParameters.PRECURSOR, precursor)
                 self.mass_spec.add_to_queue(dda_scan_params)  # push this dda scan to the mass spec queue
 
-                # dynamic exclusion: prevent the same precursor ion being fragmented multiple times in the same windows
+                # dynamic exclusion: prevent the same precursor ion being fragmented multiple times in the same rt window
                 rt_lower = rt - self.rt_tol if rt - self.rt_tol > 0 else 0
                 rt_upper = rt + self.rt_tol
                 x = ExclusionItem(from_mz=mz_lower, to_mz=mz_upper, from_rt=rt_lower, to_rt=rt_upper)
