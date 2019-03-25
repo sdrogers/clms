@@ -123,7 +123,8 @@ class IndependentMassSpectrometer(MassSpectrometer):
         self.precursor_information = defaultdict(list) # key: Precursor object, value: ms2 scans
         self.density = density # a PeakDensityEstimator object
 
-    def run(self, max_time):
+    def run(self, min_time, max_time):
+        self.time = min_time
         self.fire_event(MassSpectrometer.ACQUISITION_STREAM_OPENING)
         try:
             while self.time < max_time:
@@ -135,6 +136,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
                     # otherwise pop the parameter for the next scan from the queue
                     param = self.queue.pop(0)
                 scan = self.get_next_scan(param)
+                # logger.debug('time %f scan %s' % (self.time, scan))
 
                 # if MS2 and above, and the controller tells us which precursor ion the scan is coming from, store it
                 precursor = param.get(ScanParameters.PRECURSOR)

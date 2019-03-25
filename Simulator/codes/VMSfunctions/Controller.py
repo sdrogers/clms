@@ -54,14 +54,15 @@ class SimpleMs1Controller(Controller):
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
         default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[(0, 1e3)]])
+
         mass_spec.reset()
         mass_spec.set_repeating_scan(default_scan)
         mass_spec.register(MassSpectrometer.MS_SCAN_ARRIVED, self.handle_scan)
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_OPENING, self.handle_acquisition_open)
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_CLOSING, self.handle_acquisition_closing)
 
-    def run(self, max_time):
-        self.mass_spec.run(max_time)
+    def run(self, min_time, max_time):
+        self.mass_spec.run(min_time, max_time)
 
     def handle_acquisition_open(self):
         self.logger.info('Acquisition open')
@@ -70,7 +71,6 @@ class SimpleMs1Controller(Controller):
         self.logger.info('Acquisition closing')
 
     def _process_scan(self, scan):
-        super().handle_scan(scan)
         if scan.num_peaks > 0:
             self.logger.info('Received {}'.format(scan))
             self._plot_scan(scan)
@@ -97,7 +97,6 @@ class TopNController(Controller):
         self.min_ms2_intensity = min_ms2_intensity
 
         mass_spec.reset()
-
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
         default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[(0, 1e3)]])
@@ -108,8 +107,8 @@ class TopNController(Controller):
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_OPENING, self.handle_acquisition_open)
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_CLOSING, self.handle_acquisition_closing)
 
-    def run(self, max_time):
-        self.mass_spec.run(max_time)
+    def run(self, min_time, max_time):
+        self.mass_spec.run(min_time, max_time)
 
     def handle_acquisition_open(self):
         self.logger.info('Acquisition open')
@@ -118,9 +117,9 @@ class TopNController(Controller):
         self.logger.info('Acquisition closing')
 
     def _process_scan(self, scan):
-        if scan.ms_level == 1:  # if we get a non-empty ms1 scan
+        self.logger.info('Received {}'.format(scan))
+        if scan.ms_level == 1: # we get an ms1 scan, if it has a peak, then store it for fragmentation next time
             if scan.num_peaks > 0:
-                self.logger.info('Received {}'.format(scan))
                 self.last_ms1_scan = scan
             else:
                 self.last_ms1_scan = None
@@ -128,7 +127,6 @@ class TopNController(Controller):
         elif scan.ms_level == 2:  # if we get ms2 scan, then do something with it
             # scan.filter_intensity(self.min_ms2_intensity)
             if scan.num_peaks > 0:
-                self.logger.info('Received {}'.format(scan))
                 self._plot_scan(scan)
 
     def _update_parameters(self, scan):
@@ -213,7 +211,6 @@ class TreeController(Controller):
         self.min_ms2_intensity = min_ms2_intensity
 
         mass_spec.reset()
-
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
         default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[(0, 1e3)]])
@@ -223,8 +220,8 @@ class TreeController(Controller):
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_OPENING, self.handle_acquisition_open)
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_CLOSING, self.handle_acquisition_closing)
 
-    def run(self, max_time):
-        self.mass_spec.run(max_time)
+    def run(self, min_time, max_time):
+        self.mass_spec.run(min_time, max_time)
 
     def handle_acquisition_open(self):
         self.logger.info('Acquisition open')
@@ -233,18 +230,15 @@ class TreeController(Controller):
         self.logger.info('Acquisition closing')
 
     def _process_scan(self, scan):
-        super().handle_scan(scan)
-
+        self.logger.info('Received scan {}'.format(scan))
         if scan.ms_level == 1:  # if we get a non-empty ms1 scan
             if scan.num_peaks > 0:
-                self.logger.info('Received MS1 scan {}'.format(scan))
                 self.last_ms1_scan = scan
             else:
                 self.last_ms1_scan = None
 
         elif scan.ms_level == 2:  # if we get ms2 scan, then do something with it
             if scan.num_peaks > 0:
-                self.logger.info('Received MS2 scan {}'.format(scan))
                 self._plot_scan(scan)
 
     def _update_parameters(self, scan):
