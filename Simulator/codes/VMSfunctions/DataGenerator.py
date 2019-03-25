@@ -7,6 +7,7 @@ import numpy as np
 import pylab as plt
 import pymzml
 from sklearn.neighbors import KernelDensity
+import pandas as pd
 
 from VMSfunctions.Common import *
 
@@ -155,6 +156,9 @@ class DataSource(object):
         if log:
             X = np.log(X)
         return X
+
+    def extract_roi(self, roi_file):
+        logger.debug('ROI file %s' % roi_file)
 
     def _get_rt(self, spectrum):
         rt, units = spectrum.scan_time
