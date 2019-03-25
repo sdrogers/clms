@@ -438,3 +438,5 @@ ASALocalRun/
 test_data/*
 
 .Rproj.user
+Simulator/notebooks/.RData
+Simulator/notebooks/.Rhistory
