@@ -70,6 +70,15 @@ class EmpiricalChromatogram(Chromatogram):
         else:
             return True
 
+    def __eq__(self, other):
+        if not isinstance(other, EmpiricalChromatogram):
+            # don't attempt to compare against unrelated types
+            return NotImplemented
+
+        return np.array_equal(sorted(self.raw_mzs), sorted(other.raw_mzs)) and \
+                np.array_equal(sorted(self.raw_rts), sorted(other.raw_rts)) and \
+                np.array_equal(sorted(self.raw_intensities), sorted(other.raw_intensities))
+
 
 # Make this more generalisable. Make scipy.stats... as input, However this makes it difficult to do the cutoff
 class FunctionalChromatogram(Chromatogram):
