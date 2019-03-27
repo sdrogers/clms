@@ -20,6 +20,7 @@ events = "*"
 psims = "*"
 tornado = "==4.5.3"
 pynumpress = "*"
+tqdm = "*"
 
 [dev-packages]
 

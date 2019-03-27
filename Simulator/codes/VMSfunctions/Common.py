@@ -102,6 +102,10 @@ def get_logger(name, level=logging.DEBUG):
     return logger
 
 
+def set_log_level_warning():
+    logging.getLogger().setLevel(logging.WARNING)
+
+
 def set_log_level_info():
     logging.getLogger().setLevel(logging.INFO)
 
