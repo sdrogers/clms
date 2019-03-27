@@ -191,9 +191,9 @@ class MSN(Chemical):
 
 
 class ChemicalCreator(object):
-    def __init__(self, peak_sampler, chromatograms):
+    def __init__(self, peak_sampler, chromatogram_creator):
         self.peak_sampler = peak_sampler
-        self.chromatograms = chromatograms
+        self.chromatogram_creator = chromatogram_creator
 
     def sample(self, rt_range, mz_range, min_ms1_intensity, n_ms1_peaks, ms_levels=2, chemical_type=None,
                formula_list=None, compound_list=None, alpha=math.inf):
@@ -221,7 +221,7 @@ class ChemicalCreator(object):
         for i in range(n_ms1):
             if chemical_type == "Known":
                 formula = self.formula_list[i]
-            chrom = self.chromatograms.sample(sampled_peaks[i].intensity)          
+            chrom = self.chromatogram_creator.sample(sampled_peaks[i].intensity)
             chem = self._get_chemical(1, formula, chrom, sampled_peaks[i])
             chem.children = self._get_children(1, chem)
             chemicals.append(chem)
@@ -241,11 +241,11 @@ class ChemicalCreator(object):
         self.formula_list = None
         if self.ms_levels > 2:
             print("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
-        n_ms1 = len(self.chromatograms.chromatograms)
+        n_ms1 = len(self.chromatogram_creator.chromatograms)
         logger.debug("{} ms1 peaks to be created.".format(n_ms1))
         chemicals = []
-        for i in range(len(self.chromatograms.chromatograms)):
-            chem = self.chromatograms.chemicals[i]
+        for i in range(len(self.chromatogram_creator.chromatograms)):
+            chem = self.chromatogram_creator.chemicals[i]
             if self._valid_ms1_chem(chem):
                 chem.children = self._get_children(1, chem)
                 chemicals.append(chem)
