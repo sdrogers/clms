@@ -118,9 +118,9 @@ class FunctionalChromatogram(Chromatogram):
 
 
 class ChromatogramCreator(object):
-    def __init__(self, xcms_output):
+    def __init__(self, xcms_output, correction_func=None):
         # load the chromatograms and sort by intensity ascending
-        chromatograms, chemicals = self._load_chromatograms(xcms_output)
+        chromatograms, chemicals = self._load_chromatograms(xcms_output, correction_func)
         max_intensities = np.array([max(c.raw_intensities) for c in chromatograms])
         idx = np.argsort(max_intensities)
         self.chromatograms = chromatograms[idx]
@@ -139,7 +139,7 @@ class ChromatogramCreator(object):
             selected = takeClosest(self.max_intensities, intensity)
         return self.chromatograms[selected]
 
-    def _load_chromatograms(self, xcms_output):
+    def _load_chromatograms(self, xcms_output, correction_func):
         """
         Load CSV file of chromatogram information exported by the XCMS script 'process_data.R'
         :param df_file: the input csv file exported by the script (in gzip format)
@@ -154,13 +154,13 @@ class ChromatogramCreator(object):
             if i % 5000 == 0:
                 logger.debug('Loading {} chromatograms'.format(i))
             pid = peak_ids[i]
-            chrom, chem = self._get_xcms_chromatograms(groups, pid)
+            chrom, chem = self._get_xcms_chromatograms(groups, pid, correction_func)
             if len(chrom.rts) > 1:  # chromatograms should have more than one single data point
                 chroms.append(chrom)
                 chems.append(chem)
         return np.array(chroms), np.array(chems)
 
-    def _get_xcms_chromatograms(self, groups, pid):
+    def _get_xcms_chromatograms(self, groups, pid, correction_func):
         selected = groups.get_group(pid)
         mz = self._get_value(selected, 'mz')
         rt = self._get_value(selected, 'rt')
@@ -170,6 +170,8 @@ class ChromatogramCreator(object):
         intensities = self._get_values(selected, 'intensity_values')
         assert len(rts) == len(mzs)
         assert len(rts) == len(intensities)
+        if correction_func is not None:
+            mz, mzs = correction_func(mz, mzs)
         chrom = EmpiricalChromatogram(rts, mzs, intensities)
         chem = UnknownChemical(mz, rt, max_intensity, chrom, None)
         return chrom, chem
