@@ -262,11 +262,11 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
     def _get_mz(self, chemical, query_rt, which_isotope, which_adduct):
         if chemical.ms_level == 1:
-            return (adductTransformation(chemical.isotopes[which_isotope][0],
-                                         self._get_adducts(chemical)[which_adduct][0]) +
+            return (adduct_transformation(chemical.isotopes[which_isotope][0],
+                                          self._get_adducts(chemical)[which_adduct][0]) +
                     chemical.chromatogram.get_relative_mz(query_rt - chemical.rt))
         else:
-            return adductTransformation(chemical.isotopes[which_isotope][0], self._get_adducts(chemical)[which_adduct][0])
+            return adduct_transformation(chemical.isotopes[which_isotope][0], self._get_adducts(chemical)[which_adduct][0])
 
     def _isolation_match(self, chemical, query_rt, isolation_windows, which_isotope, which_adduct):
         # assumes list is formated like:

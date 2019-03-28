@@ -108,7 +108,7 @@ class Isotopes(object):
 
 class Adducts(object):
     def __init__(self, formula):
-        self.adduct_names = ["M+H", "[M+ACN]+H", "[M+CH3OH]+H", "[M+NH3]+H"]  # TODO: add other options
+        self.adduct_names = list(POS_TRANSFORMATIONS.keys())
         self.formula = formula
 
     def get_adducts(self):
@@ -121,7 +121,9 @@ class Adducts(object):
 
     def _get_adduct_proportions(self):
         # TODO: replace this with something proper
-        proportions = np.random.dirichlet([1,0.1,0.1,0.1]).tolist()
+        prior = np.ones(len(self.adduct_names)) * 0.1
+        prior[0] = 1.0 # give more weight to the first one, i.e. M+H
+        proportions = np.random.dirichlet(prior).tolist()
         return proportions
 
     def _get_adduct_names(self):
