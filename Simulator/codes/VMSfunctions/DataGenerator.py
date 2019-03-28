@@ -263,6 +263,12 @@ class DataSource(object):
                         roi.add(p)
         self.all_rois = all_rois
 
+    def save_roi(self, out_file):
+        save_obj(self.all_rois, out_file)
+
+    def load_roi(self, in_file):
+        self.all_rois = load_obj(in_file)
+
     def _get_rt(self, spectrum):
         rt, units = spectrum.scan_time
         if units == 'minute':
