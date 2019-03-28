@@ -24,7 +24,7 @@ class NoisyRoiCreator(ChemicalCreator):
         # collect the regions of interest that contain no peaks
         self.false_rois = [roi for roi in rois_data['rois'] if not roi.pickedPeak]
 
-    def sample(self, N, ms_levels=2, min_num_scans=None):
+    def sample(self, N, ms_levels=2, min_num_scans=None, min_rt=None, max_rt=None, min_ms1_intensity=None):
         self.ms_levels = ms_levels
         self.crp_samples = [[] for i in range(self.ms_levels)]
         self.crp_index = [[] for i in range(self.ms_levels)]
@@ -38,21 +38,23 @@ class NoisyRoiCreator(ChemicalCreator):
             # pick one roi and check that it's valid
             selected = np.random.choice(len(self.false_rois), 1)[0]
             roi = self.false_rois[selected]
-            if self._valid_roi(roi, min_num_scans):
-                # if yes, then try to turn this into a chromatogram and unknown chemical
-                chrom = roi.to_chromatogram()
-                if chrom is not None:
-                    chem = self.to_unknown_chemical(chrom)
-                    chem.children = self._get_children(1, chem)
-                    chemicals.append(chem)
+            # if yes, then try to turn this into a chromatogram and unknown chemical
+            chrom = roi.to_chromatogram()
+            if chrom is not None and self._valid_roi(roi, min_num_scans, min_rt, max_rt, min_ms1_intensity):
+                chem = self.to_unknown_chemical(chrom)
+                chem.children = self._get_children(1, chem)
+                chemicals.append(chem)
         return chemicals
 
-    def _valid_roi(self, roi, min_scans):
-        if min_scans is not None:
-            if roi.num_scans() >= min_scans:
-                return True
-            else:
-                return False
+    def _valid_roi(self, roi, min_scans, min_rt, max_rt, min_ms1_intensity):
+        if min_scans is not None and roi.num_scans() < min_scans:
+            return False
+        if min_rt is not None and roi.rts()[0] < min_rt:
+            return False
+        if max_rt is not None and roi.rts()[-1] > max_rt:
+            return False
+        if min_ms1_intensity is not None and max(roi.intensities()) < min_ms1_intensity:
+            return False
         return True
 
     def to_unknown_chemical(self, chrom):
