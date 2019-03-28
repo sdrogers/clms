@@ -123,11 +123,12 @@ class IndependentMassSpectrometer(MassSpectrometer):
         self.precursor_information = defaultdict(list) # key: Precursor object, value: ms2 scans
         self.density = density # a PeakDensityEstimator object
 
-    def run(self, min_time, max_time):
+    def run(self, min_time, max_time, pbar=None):
         self.time = min_time
         self.fire_event(MassSpectrometer.ACQUISITION_STREAM_OPENING)
         try:
             while self.time < max_time:
+                initial_time = self.time
 
                 # if the processing queue is empty, then just do the repeating scan
                 if len(self.queue) == 0:
@@ -143,8 +144,15 @@ class IndependentMassSpectrometer(MassSpectrometer):
                 if scan.ms_level >= 2 and precursor is not None and scan.num_peaks > 0:
                     self.precursor_information[precursor].append(scan)
 
+                # print a progress bar if provided
+                if pbar is not None:
+                    elapsed = self.time - initial_time
+                    pbar.update(elapsed)
+
         finally:
             self.fire_event(MassSpectrometer.ACQUISITION_STREAM_CLOSING)
+            if pbar is not None:
+                pbar.close()
 
     def get_next_scan(self, param):
         if param is not None:

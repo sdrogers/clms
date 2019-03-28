@@ -1,6 +1,7 @@
 from collections import namedtuple
 
 import pylab as plt
+from tqdm import tqdm
 
 from VMSfunctions.MassSpec import *
 from VMSfunctions.MzmlWriter import *
@@ -34,6 +35,9 @@ class Controller(object):
     def _update_parameters(self, scan):
         raise NotImplementedError()
 
+    def run(self, min_time, max_time, progress_bar=True):
+        raise NotImplementedError()
+
     def _plot_scan(self, scan):
         if self.make_plot:
             plt.figure()
@@ -61,8 +65,12 @@ class SimpleMs1Controller(Controller):
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_OPENING, self.handle_acquisition_open)
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_CLOSING, self.handle_acquisition_closing)
 
-    def run(self, min_time, max_time):
-        self.mass_spec.run(min_time, max_time)
+    def run(self, min_time, max_time, progress_bar=True):
+        if progress_bar:
+            with tqdm(total=max_time - min_time, initial=0) as pbar:
+                self.mass_spec.run(min_time, max_time, pbar=pbar)
+        else:
+            self.mass_spec.run(min_time, max_time)
 
     def handle_acquisition_open(self):
         self.logger.info('Acquisition open')
@@ -107,8 +115,12 @@ class TopNController(Controller):
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_OPENING, self.handle_acquisition_open)
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_CLOSING, self.handle_acquisition_closing)
 
-    def run(self, min_time, max_time):
-        self.mass_spec.run(min_time, max_time)
+    def run(self, min_time, max_time, progress_bar=True):
+        if progress_bar:
+            with tqdm(total=max_time - min_time, initial=0) as pbar:
+                self.mass_spec.run(min_time, max_time, pbar=pbar)
+        else:
+            self.mass_spec.run(min_time, max_time)
 
     def handle_acquisition_open(self):
         self.logger.info('Acquisition open')
@@ -220,8 +232,12 @@ class TreeController(Controller):
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_OPENING, self.handle_acquisition_open)
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_CLOSING, self.handle_acquisition_closing)
 
-    def run(self, min_time, max_time):
-        self.mass_spec.run(min_time, max_time)
+    def run(self, min_time, max_time, progress_bar=True):
+        if progress_bar:
+            with tqdm(total=max_time - min_time, initial=0) as pbar:
+                self.mass_spec.run(min_time, max_time, pbar=pbar)
+        else:
+            self.mass_spec.run(min_time, max_time)
 
     def handle_acquisition_open(self):
         self.logger.info('Acquisition open')
