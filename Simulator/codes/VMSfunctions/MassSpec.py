@@ -10,6 +10,8 @@ from VMSfunctions.Common import *
 # mass spec generates scans (is an iterator over scans)
 # scan contains: mz list, intensity list, rt, ms_level, precursor_mass, window
 # simplest controller: just generates ms1 data
+from VMSfunctions.DataGenerator import Peak
+
 
 class Scan(object):
     def __init__(self, scan_id, mzs, intensities, ms_level, rt, density=None):
@@ -122,6 +124,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
         self.repeating_scan_parameters = None
         self.precursor_information = defaultdict(list) # key: Precursor object, value: ms2 scans
         self.density = density # a PeakDensityEstimator object
+        self.chemicals_to_peaks = defaultdict(list) # which chemicals produce which peaks
 
     def run(self, min_time, max_time, pbar=None):
         self.time = min_time
@@ -196,10 +199,18 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
             # mzs is a list of (mz, intensity) for the different adduct/isotopes combinations of a chemical            
             mzs = self._get_all_mz_peaks(chemical, scan_time, ms_level, isolation_windows)
-
             if mzs is not None:
-                chem_mzs = [x[0] for x in mzs]
-                chem_intensities = [x[1] for x in mzs]
+                chem_mzs = []
+                chem_intensities = []
+                for peak_mz, peak_intensity in mzs:
+                    if peak_intensity > 0:
+                        chem_mzs.append(peak_mz)
+                        chem_intensities.append(peak_intensity)
+
+                        # track which peaks produced by which chemical for benchmarking purpose
+                        p = Peak(peak_mz, scan_time, peak_intensity, ms_level)
+                        self.chemicals_to_peaks[chemical].append(p)
+
                 scan_mzs.extend(chem_mzs)
                 scan_intensities.extend(chem_intensities)
 

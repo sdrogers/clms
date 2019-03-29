@@ -8,13 +8,15 @@ import pylab as plt
 import pymzml
 from sklearn.neighbors import KernelDensity
 import pandas as pd
+import math
 
 from VMSfunctions.Chromatograms import EmpiricalChromatogram, UnknownChemical
 from VMSfunctions.Common import *
 
 logger = get_logger('DataGenerator')
 
-class PeakSample(object):
+
+class Peak(object):
     """
     A simple class to represent an empirical or sampled scan-level peak object
     """
@@ -26,7 +28,17 @@ class PeakSample(object):
         self.ms_level = ms_level
 
     def __repr__(self):
-        return 'PeakSample mz=%.4f rt=%.2f intensity=%.2f ms_level=%d' % (self.mz, self.rt, self.intensity, self.ms_level)
+        return 'Peak mz=%.4f rt=%.2f intensity=%.2f ms_level=%d' % (self.mz, self.rt, self.intensity, self.ms_level)
+
+    def __eq__(self, other):
+        if not isinstance(other, Peak):
+            # don't attempt to compare against unrelated types
+            return NotImplemented
+
+        return math.isclose(self.mz, other.mz) and \
+            math.isclose(self.rt, other.rt) and \
+            math.isclose(self.intensity, other.intensity) and \
+            self.ms_level == other.ms_level
 
 
 class RegionOfInterest(object):
@@ -177,11 +189,11 @@ class DataSource(object):
                 if spectrum.ms_level != ms_level:
                     continue
 
-                # collect all valid PeakSample objects in a spectrum
+                # collect all valid Peak objects in a spectrum
                 spectrum_peaks = []
                 for mz, intensity in spectrum.peaks('raw'):
                     rt = self._get_rt(spectrum)
-                    p = PeakSample(mz, rt, intensity, spectrum.ms_level)
+                    p = Peak(mz, rt, intensity, spectrum.ms_level)
                     if self._valid_peak(p, min_intensity, min_rt, max_rt):
                         spectrum_peaks.append(p)
 
@@ -257,7 +269,7 @@ class DataSource(object):
                 rt = self._get_rt(spectrum)
                 for mz, intensity in spectrum.peaks('raw'):
                     # find the ROIs that contain this spectrum peak
-                    p = PeakSample(mz, rt, intensity, spectrum.ms_level)
+                    p = Peak(mz, rt, intensity, spectrum.ms_level)
                     rois = self._get_containing_rois(p, rois_data)
                     for roi in rois: # if found, assign peaks to ROIs
                         roi.add(p)
@@ -457,7 +469,7 @@ class PeakSampler(object):
             intensity = np.exp(vals[0, 1])
             mz = vals[0, 0]
             rt = vals[0, 2]
-            p = PeakSample(mz, rt, intensity, ms_level)
+            p = Peak(mz, rt, intensity, ms_level)
             if self._is_valid(p, min_mz, max_mz, min_rt, max_rt, min_intensity): # othwerise we just keep rejecting
                 peaks.append(p)
         return peaks
