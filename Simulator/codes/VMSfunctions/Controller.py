@@ -7,9 +7,8 @@ from VMSfunctions.MassSpec import *
 from VMSfunctions.MzmlWriter import *
 
 
-class Controller(object):
+class Controller(LoggerMixin):
     def __init__(self, mass_spec):
-        self.logger = get_logger(self.__class__.__name__)
         self.scans = defaultdict(list)  # key: ms level, value: list of scans for that level
         self.mass_spec = mass_spec
         self.make_plot = False

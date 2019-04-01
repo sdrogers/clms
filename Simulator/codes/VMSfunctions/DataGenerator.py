@@ -13,8 +13,6 @@ import math
 from VMSfunctions.Chromatograms import EmpiricalChromatogram, UnknownChemical
 from VMSfunctions.Common import *
 
-logger = get_logger('DataGenerator')
-
 
 class Peak(object):
     """
@@ -81,7 +79,7 @@ class RegionOfInterest(object):
         self.scrange[0], self.scrange[1])
 
 
-class DataSource(object):
+class DataSource(LoggerMixin):
     """
     A class to load and extract centroided peaks from CSV and mzML files.
     :param min_ms1_intensity: minimum ms1 intensity for filtering
@@ -122,7 +120,7 @@ class DataSource(object):
                                     extraAccessions=[('MS:1000016', ['value', 'unitName'])])
 
             fname = os.path.basename(filename)
-            logger.info('Loading %s' % fname)
+            self.logger.info('Loading %s' % fname)
             file_spectra[fname] = {}
             start_time = 0
             for scan_number, spectrum in enumerate(run):
@@ -153,7 +151,7 @@ class DataSource(object):
         plt.plot(X[:, 0], np.full(X.shape[0], -0.01), '|k')
         plt.title('Histogram for %s -- shape %s' % (data_type, str(X.shape)))
         plt.show()
-        logger.debug(X)
+        self.logger.debug(X)
 
     def plot_peak(self, peak):
         f, axarr = plt.subplots(2, sharex=True)
@@ -221,7 +219,7 @@ class DataSource(object):
 
         # convert each row in the dataframe to a ROI object
         for filename in roi_filenames:
-            logger.info('Creating ROI objects for %s' % filename)
+            self.logger.info('Creating ROI objects for %s' % filename)
             rois_data = {
                 'rois': [],
                 'mzmin': [],
@@ -233,7 +231,7 @@ class DataSource(object):
             # convert each row of the dataframe to roi objects
             for idx, row in self.roi_df.iterrows(): # TODO: make this faster
                 if (idx % 50000 == 0):
-                    logger.debug('%6d/%6d' % (idx, self.roi_df.shape[0]))
+                    self.logger.debug('%6d/%6d' % (idx, self.roi_df.shape[0]))
                 file_name = row['file']
                 mzmin = row['mzmin']
                 mzmax = row['mzmax']
@@ -258,7 +256,7 @@ class DataSource(object):
             rois_data['rtmin'] = np.array(rois_data['rtmin'])
             rois_data['rtmax'] = np.array(rois_data['rtmax'])
             self.all_rois[filename] = rois_data
-            logger.info('Extracted %d ROIs for %s' % (len(rois_data['rois']), filename))
+            self.logger.info('Extracted %d ROIs for %s' % (len(rois_data['rois']), filename))
 
     def _valid_roi(self, roi, min_rt=None, max_rt=None):
         if min_rt is not None and roi.rtrange[0] < min_rt:
@@ -273,13 +271,13 @@ class DataSource(object):
         # assign raw spectrum peaks to ROI
         for filename in unique_filenames:
             rois_data = self.all_rois[filename]
-            logger.info('Populating ROI objects for %s' % filename)
+            self.logger.info('Populating ROI objects for %s' % filename)
 
             # get spectra for a file
             spectra = self.file_spectra[filename]
             for scan_id, spectrum in spectra.items(): # loop over all scans
                 if scan_id % 100 == 0:
-                    logger.debug('%6d/%6d processing spectrum %s' % (scan_id, len(spectra), spectrum))
+                    self.logger.debug('%6d/%6d processing spectrum %s' % (scan_id, len(spectra), spectrum))
                 rt = self._get_rt(spectrum)
                 for mz, intensity in spectrum.peaks('raw'):
                     # find the ROIs that contain this spectrum peak
@@ -345,15 +343,15 @@ class DensityEstimator(object):
             data_type = param['data_type']
 
             # get data
-            logger.debug('Retrieving %s values from %s' % (data_type, data_source))
+            self.logger.debug('Retrieving %s values from %s' % (data_type, data_source))
             min_intensity = self.min_ms1_intensity if ms_level == 1 else self.min_ms2_intensity
             log = True if data_type == INTENSITY else False
             X = data_source.get_data(data_type, filename, ms_level, min_intensity=min_intensity,
                                      min_rt=self.min_rt, max_rt=self.max_rt, log=log)
-            logger.debug('Retrieved %s values' % str(X.shape))
+            self.logger.debug('Retrieved %s values' % str(X.shape))
 
             # fit kde
-            logger.debug('Fitting kde on %s' % data_type)
+            self.logger.debug('Fitting kde on %s' % data_type)
             bandwidth = param['bandwidth']
             kde = KernelDensity(kernel=self.kernel, bandwidth=bandwidth).fit(X)
             self.kdes[(data_type, ms_level)] = kde
@@ -418,7 +416,7 @@ class PeakDensityEstimator(object):
             data_type = param['data_type']
 
             # get data
-            logger.debug('Retrieving %s values from %s' % (data_type, data_source))
+            self.logger.debug('Retrieving %s values from %s' % (data_type, data_source))
             min_intensity = self.min_ms1_intensity if ms_level == 1 else self.min_ms2_intensity
             if data_type == MZ_INTENSITY:
                 mz = data_source.get_data(MZ, filename, ms_level, min_intensity=min_intensity,
@@ -453,7 +451,7 @@ class PeakDensityEstimator(object):
     def _plot(self, kde, X, data_type, filename, bandwidth):
         if self.plot:
             if data_type == MZ_INTENSITY:
-                logger.debug('Plotting for %s not implemented' % MZ_INTENSITY)
+                self.logger.debug('Plotting for %s not implemented' % MZ_INTENSITY)
             else:
                 fname = 'All' if filename is None else filename
                 title = '%s density estimation for %s - bandwidth %.3f' % (data_type, fname, bandwidth)

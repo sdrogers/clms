@@ -68,13 +68,12 @@ class ScanParameters(object):
         return 'ScanParameters %s' % (self.params)
 
 
-class MassSpectrometer(object):
+class MassSpectrometer(LoggerMixin):
     MS_SCAN_ARRIVED = 'MsScanArrived'
     ACQUISITION_STREAM_OPENING = 'AcquisitionStreamOpening'
     ACQUISITION_STREAM_CLOSING = 'AcquisitionStreamClosing'
 
     def __init__(self, ionisation_mode):
-        self.logger = get_logger(self.__class__.__name__)
         self.ionisation_mode = ionisation_mode
 
         # following IAPI events

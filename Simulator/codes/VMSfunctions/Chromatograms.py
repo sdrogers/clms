@@ -5,7 +5,6 @@ import pandas as pd
 import scipy
 import scipy.stats
 
-logger = logging.getLogger('Chromatograms')
 from VMSfunctions.Common import *
 from VMSfunctions.Chemicals import *
 
@@ -118,7 +117,7 @@ class FunctionalChromatogram(Chromatogram):
             return True
 
 
-class ChromatogramCreator(object):
+class ChromatogramCreator(LoggerMixin):
     def __init__(self, xcms_output, correction_func=None):
         # load the chromatograms and sort by intensity ascending
         chromatograms, chemicals = self._load_chromatograms(xcms_output, correction_func)
@@ -153,7 +152,7 @@ class ChromatogramCreator(object):
         chems = []
         for i in range(len(peak_ids)):
             if i % 5000 == 0:
-                logger.debug('Loading {} chromatograms'.format(i))
+                self.logger.debug('Loading {} chromatograms'.format(i))
             pid = peak_ids[i]
             chrom, chem = self._get_xcms_chromatograms(groups, pid, correction_func)
             if len(chrom.rts) > 1:  # chromatograms should have more than one single data point

@@ -5,8 +5,6 @@ import numpy as np
 from VMSfunctions.Chemicals import ChemicalCreator, UnknownChemical
 from VMSfunctions.Common import *
 
-logger = get_logger('Noise')
-
 
 class RoiToChemicalCreator(ChemicalCreator):
     def __init__(self, peak_sampler, data_source, filename=None, min_ms1_intensity=None):
@@ -27,7 +25,7 @@ class RoiToChemicalCreator(ChemicalCreator):
         self.alpha = math.inf
         self.counts = [[] for i in range(self.ms_levels)]
         if self.ms_levels > 2:
-            logger.warning("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
+            self.logger.warning("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
 
         # collect the regions of interest that contain no peaks
         false_rois = [roi for roi in rois_data['rois'] if not roi.pickedPeak]
@@ -35,7 +33,7 @@ class RoiToChemicalCreator(ChemicalCreator):
         self.chemicals = []
         for i in range(len(false_rois)):
             if i % 50000 == 0:
-                logger.debug('%6d/%6d' % (i, len(false_rois)))
+                self.logger.debug('%6d/%6d' % (i, len(false_rois)))
             # if yes, then try to turn this into a chromatogram and unknown chemical
             roi = false_rois[i]
             chrom = roi.to_chromatogram()
@@ -45,7 +43,7 @@ class RoiToChemicalCreator(ChemicalCreator):
                 self.chromatograms.append(chrom)
                 self.chemicals.append(chem)
         assert len(self.chromatograms) == len(self.chemicals)
-        logger.info('Found %d ROIs above thresholds' % len(self.chromatograms))
+        self.logger.info('Found %d ROIs above thresholds' % len(self.chromatograms))
 
     def sample(self, N, min_num_scans=None):
         chemicals = []

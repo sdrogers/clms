@@ -1,15 +1,11 @@
-import sys
-
 import copy
 import re
 import scipy
 import scipy.stats
-from random import sample
 
 from VMSfunctions.ChineseRestaurantProcess import *
 from VMSfunctions.Common import *
 
-logger = get_logger('Chemicals')
 
 class Compound(object):
     def __init__(self, name, chemical_formula, monisotopic_molecular_weight, smiles, inchi, inchikey):
@@ -192,7 +188,7 @@ class MSN(Chemical):
         return 'MSN Fragment mz=%.4f ms_level=%d' % (self.isotopes[0][0], self.ms_level)
 
 
-class ChemicalCreator(object):
+class ChemicalCreator(LoggerMixin):
     def __init__(self, peak_sampler):
         self.peak_sampler = peak_sampler
 
@@ -210,13 +206,13 @@ class ChemicalCreator(object):
         if self.ms_levels > 2:
             print("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
         n_ms1 = self._get_n(1)
-        logger.debug("{} ms1 peaks to be created.".format(n_ms1))
+        self.logger.debug("{} ms1 peaks to be created.".format(n_ms1))
         formula = None
         chemicals = []
         sampled_peaks = self.peak_sampler.sample(1, n_ms1, mz_range[0][0], mz_range[0][1], rt_range[0][0], rt_range[0][1], min_ms1_intensity)
         if chemical_type == "Known" and compound_list != None:
             if len(compound_list)<n_ms1:
-                logger.warning('compound_list not long enough')
+                self.logger.warning('compound_list not long enough')
                 return
             self.formula_list = self._sample_formulae(sampled_peaks)
         for i in range(n_ms1):
@@ -227,7 +223,7 @@ class ChemicalCreator(object):
             chem.children = self._get_children(1, chem)
             chemicals.append(chem)
             if (i/25 == math.floor(i/25)):
-                logger.debug("i = {}".format(i))
+                self.logger.debug("i = {}".format(i))
         return chemicals        
         
     def sample_from_chromatograms(self, chromatogram_creator, min_rt, max_rt, min_ms1_intensity, ms_levels=2):
@@ -243,7 +239,7 @@ class ChemicalCreator(object):
         if self.ms_levels > 2:
             print("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
         n_ms1 = len(chromatogram_creator.chromatograms)
-        logger.debug("{} ms1 peaks to be created.".format(n_ms1))
+        self.logger.debug("{} ms1 peaks to be created.".format(n_ms1))
         chemicals = []
         for i in range(len(chromatogram_creator.chromatograms)):
             chem = chromatogram_creator.chemicals[i]
@@ -251,7 +247,7 @@ class ChemicalCreator(object):
                 chem.children = self._get_children(1, chem)
                 chemicals.append(chem)
                 if i % 2500 == 0:
-                    logger.debug("i = {}".format(i))
+                    self.logger.debug("i = {}".format(i))
         return chemicals
     
     def _sample_formulae(self, sampled_peaks):
