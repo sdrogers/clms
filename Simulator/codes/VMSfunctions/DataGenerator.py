@@ -70,7 +70,7 @@ class RegionOfInterest(object):
     def to_chromatogram(self):
         if len(self.peaks) == 0 or len(self.peaks) == 1:
             return None
-        chrom = EmpiricalChromatogram(self.rts(), self.mzs(), self.intensities())
+        chrom = EmpiricalChromatogram(self.rts(), self.mzs(), self.intensities(), roi=self)
         return chrom
 
     def __repr__(self):
@@ -99,6 +99,9 @@ class DataSource(object):
 
         # A dictionary to stores region of interests
         self.all_rois = {}
+
+        # Dataframe of exported ROI information
+        self.roi_df = None
 
         # pymzml parameters
         self.ms1_precision = 5e-6
@@ -212,13 +215,12 @@ class DataSource(object):
             X = np.log(X)
         return X
 
-    def extract_roi(self, roi_file):
-        df = pd.read_csv(roi_file)
-        unique_filenames = df['file'].unique()
+    def extract_roi(self, roi_file, min_rt=None, max_rt=None):
+        self.roi_df = pd.read_csv(roi_file)
+        roi_filenames = self.roi_df['file'].unique()
 
         # convert each row in the dataframe to a ROI object
-        all_rois = {}  # key: file_name, value: a dict of rois, rois_mzmin, rois_mzmax, rois_rtmin, rois_rtmax
-        for filename in unique_filenames:
+        for filename in roi_filenames:
             logger.info('Creating ROI objects for %s' % filename)
             rois_data = {
                 'rois': [],
@@ -229,9 +231,9 @@ class DataSource(object):
             }
 
             # convert each row of the dataframe to roi objects
-            for idx, row in df.iterrows(): # TODO: make this faster
+            for idx, row in self.roi_df.iterrows(): # TODO: make this faster
                 if (idx % 50000 == 0):
-                    logger.debug('%6d/%6d' % (idx, df.shape[0]))
+                    logger.debug('%6d/%6d' % (idx, self.roi_df.shape[0]))
                 file_name = row['file']
                 mzmin = row['mzmin']
                 mzmax = row['mzmax']
@@ -242,12 +244,12 @@ class DataSource(object):
                 pickedPeak = row['pickedPeak']
                 mode = row['mode']
                 roi = RegionOfInterest(file_name, mode, pickedPeak, (mzmin, mzmax), (rtmin, rtmax), (scmin, scmax))
-
-                rois_data['rois'].append(roi)
-                rois_data['mzmin'].append(mzmin)
-                rois_data['mzmax'].append(mzmax)
-                rois_data['rtmin'].append(rtmin)
-                rois_data['rtmax'].append(rtmax)
+                if self._valid_roi(roi, min_rt, max_rt):
+                    rois_data['rois'].append(roi)
+                    rois_data['mzmin'].append(mzmin)
+                    rois_data['mzmax'].append(mzmax)
+                    rois_data['rtmin'].append(rtmin)
+                    rois_data['rtmax'].append(rtmax)
 
             # convert all values to numpy arrays
             rois_data['rois'] = np.array(rois_data['rois'])
@@ -255,10 +257,22 @@ class DataSource(object):
             rois_data['mzmax'] = np.array(rois_data['mzmax'])
             rois_data['rtmin'] = np.array(rois_data['rtmin'])
             rois_data['rtmax'] = np.array(rois_data['rtmax'])
-            all_rois[filename] = rois_data
+            self.all_rois[filename] = rois_data
+            logger.info('Extracted %d ROIs for %s' % (len(rois_data['rois']), filename))
+
+    def _valid_roi(self, roi, min_rt=None, max_rt=None):
+        if min_rt is not None and roi.rtrange[0] < min_rt:
+            return False
+        if max_rt is not None and roi.rtrange[1] > max_rt:
+            return False
+        return True
+
+    def populate_roi(self):
+        unique_filenames = self.roi_df['file'].unique()
 
         # assign raw spectrum peaks to ROI
         for filename in unique_filenames:
+            rois_data = self.all_rois[filename]
             logger.info('Populating ROI objects for %s' % filename)
 
             # get spectra for a file
@@ -273,7 +287,6 @@ class DataSource(object):
                     rois = self._get_containing_rois(p, rois_data)
                     for roi in rois: # if found, assign peaks to ROIs
                         roi.add(p)
-        self.all_rois = all_rois
 
     def save_roi(self, out_file):
         save_obj(self.all_rois, out_file)

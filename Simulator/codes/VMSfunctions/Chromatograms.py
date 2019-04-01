@@ -26,13 +26,14 @@ class EmpiricalChromatogram(Chromatogram):
     Empirical Chromatograms to be used within Chemicals
     """
 
-    def __init__(self, rts, mzs, intensities):
+    def __init__(self, rts, mzs, intensities, roi=None):
         self.rts = [x - min(rts) for x in rts]
         self.mzs = [x - sum(mzs) / len(mzs) for x in mzs]  # may want to just set this to 0 and remove from input
         self.intensities = chromatogramDensityNormalisation(rts, intensities)
         self.raw_rts = rts
         self.raw_mzs = mzs
         self.raw_intensities = intensities
+        self.roi = roi
 
     def get_relative_intensity(self, query_rt):
         if self._rt_match(query_rt) == False:

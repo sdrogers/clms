@@ -8,8 +8,8 @@ from VMSfunctions.Common import *
 logger = get_logger('Noise')
 
 
-class NoisyRoiCreator(ChemicalCreator):
-    def __init__(self, peak_sampler, data_source, filename=None):
+class RoiToChemicalCreator(ChemicalCreator):
+    def __init__(self, peak_sampler, data_source, filename=None, min_ms1_intensity=None):
         super().__init__(peak_sampler)
 
         # if filename is specified, then we use the ROIs only from that file
@@ -21,11 +21,7 @@ class NoisyRoiCreator(ChemicalCreator):
             for filename in data_source.all_rois:
                 rois_data.extend(data_source.all_rois[filename])
 
-        # collect the regions of interest that contain no peaks
-        self.false_rois = [roi for roi in rois_data['rois'] if not roi.pickedPeak]
-
-    def sample(self, N, ms_levels=2, min_num_scans=None, min_rt=None, max_rt=None, min_ms1_intensity=None):
-        self.ms_levels = ms_levels
+        self.ms_levels = 2
         self.crp_samples = [[] for i in range(self.ms_levels)]
         self.crp_index = [[] for i in range(self.ms_levels)]
         self.alpha = math.inf
@@ -33,25 +29,36 @@ class NoisyRoiCreator(ChemicalCreator):
         if self.ms_levels > 2:
             logger.warning("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
 
+        # collect the regions of interest that contain no peaks
+        false_rois = [roi for roi in rois_data['rois'] if not roi.pickedPeak]
+        self.chromatograms = []
+        self.chemicals = []
+        for i in range(len(false_rois)):
+            if i % 50000 == 0:
+                logger.debug('%6d/%6d' % (i, len(false_rois)))
+            # if yes, then try to turn this into a chromatogram and unknown chemical
+            roi = false_rois[i]
+            chrom = roi.to_chromatogram()
+            if chrom is not None and self._valid_roi(roi, min_ms1_intensity=min_ms1_intensity):
+                chem = self.to_unknown_chemical(chrom)
+                chem.children = self._get_children(1, chem) # TODO: this should happen inside the mass spec class
+                self.chromatograms.append(chrom)
+                self.chemicals.append(chem)
+        assert len(self.chromatograms) == len(self.chemicals)
+        logger.info('Found %d ROIs above thresholds' % len(self.chromatograms))
+
+    def sample(self, N, min_num_scans=None):
         chemicals = []
         while len(chemicals) < N:
-            # pick one roi and check that it's valid
-            selected = np.random.choice(len(self.false_rois), 1)[0]
-            roi = self.false_rois[selected]
-            # if yes, then try to turn this into a chromatogram and unknown chemical
-            chrom = roi.to_chromatogram()
-            if chrom is not None and self._valid_roi(roi, min_num_scans, min_rt, max_rt, min_ms1_intensity):
-                chem = self.to_unknown_chemical(chrom)
-                chem.children = self._get_children(1, chem)
+            # pick one chemical with roi and check that it's valid
+            chem = np.random.choice(len(self.chemicals), 1)[0]
+            roi = chem.chromatogram.roi
+            if roi is not None and self._valid_roi(roi, min_num_scans=min_num_scans):
                 chemicals.append(chem)
         return chemicals
 
-    def _valid_roi(self, roi, min_scans, min_rt, max_rt, min_ms1_intensity):
-        if min_scans is not None and roi.num_scans() < min_scans:
-            return False
-        if min_rt is not None and roi.rts()[0] < min_rt:
-            return False
-        if max_rt is not None and roi.rts()[-1] > max_rt:
+    def _valid_roi(self, roi, min_num_scans=None, min_ms1_intensity=None):
+        if min_num_scans is not None and roi.num_scans() < min_num_scans:
             return False
         if min_ms1_intensity is not None and max(roi.intensities()) < min_ms1_intensity:
             return False
