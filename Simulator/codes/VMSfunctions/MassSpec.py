@@ -261,13 +261,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
             return self._get_adducts(chemical.parent)
 
     def _rt_match(self, chemical, query_rt):
-        if chemical.ms_level == 1:
-            if chemical.chromatogram._rt_match(query_rt - chemical.rt):
-                return True
-            else:
-                return False
-        else:
-            True
+        return chemical.ms_level != 1 or chemical.chromatogram._rt_match(query_rt - chemical.rt)
 
     def _get_intensity(self, chemical, query_rt, which_isotope, which_adduct):
         if chemical.ms_level == 1:
