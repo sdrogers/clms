@@ -125,6 +125,13 @@ class IndependentMassSpectrometer(MassSpectrometer):
         self.density = density # a PeakDensityEstimator object
         self.chemicals_to_peaks = defaultdict(list) # which chemicals produce which peaks
 
+        try: # for EmpiricalChromatogram, we have the min_rt and max_rt
+            self.chrom_min_rts = np.array([chem.chrom.min_rt for chem in self.chemicals])
+            self.chrom_max_rts = np.array([chem.chrom.max_rt for chem in self.chemicals])
+        except AttributeError: # TODO: ask vinny how to set min_rt and max_rt for functional chromatograms
+            self.chrom_min_rts = np.array([chem.rt-np.inf for chem in self.chemicals])
+            self.chrom_max_rts = np.array([chem.rt+np.inf for chem in self.chemicals])
+
     def run(self, min_time, max_time, pbar=None):
         self.time = min_time
         self.fire_event(MassSpectrometer.ACQUISITION_STREAM_OPENING)
@@ -193,7 +200,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
         isolation_windows = param.get(ScanParameters.ISOLATION_WINDOWS)
 
         # for all chemicals that come out from the column coupled to the mass spec
-        for i in range(len(self.chemicals)):
+        for i in self._get_chem_indices(scan_time):
             chemical = self.chemicals[i]
 
             # mzs is a list of (mz, intensity) for the different adduct/isotopes combinations of a chemical            
@@ -217,6 +224,12 @@ class IndependentMassSpectrometer(MassSpectrometer):
         scan_intensities = np.array(scan_intensities)
         return Scan(self.idx, scan_mzs, scan_intensities, ms_level, scan_time,
                     density=self.density)
+
+    def _get_chem_indices(self, query_rt):
+        rtmin_check = self.chrom_min_rts <= query_rt
+        rtmax_check = query_rt <= self.chrom_max_rts
+        idx = np.nonzero(rtmin_check & rtmax_check)[0]
+        return idx
 
     def _get_all_mz_peaks(self, chemical, query_rt, ms_level, isolation_windows):
         if not self._rt_match(chemical, query_rt):
