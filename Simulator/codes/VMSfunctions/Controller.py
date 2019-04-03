@@ -92,16 +92,16 @@ Precursor = namedtuple('Precursor', 'precursor_mz precursor_intensity precursor_
 
 
 class TopNController(Controller):
-    def __init__(self, mass_spec, N, isolation_window, rt_tol, exclusion_list=None, min_ms2_intensity=0):
+    def __init__(self, mass_spec, N, isolation_window, rt_tol, min_ms1_intensity, exclusion_list=None):
         super().__init__(mass_spec)
         self.last_ms1_scan = None
         self.N = N
         self.isolation_window = isolation_window  # the isolation window (in Dalton) around a precursor ion to be fragmented
         self.rt_tol = rt_tol  # the rt window to prevent the same precursor ion to be fragmented again
+        self.min_ms1_intensity = min_ms1_intensity # minimum ms1 intensity to fragment
         if exclusion_list is None:
             exclusion_list = []
         self.exclusion_list = exclusion_list  # a list of ExclusionItem
-        self.min_ms2_intensity = min_ms2_intensity
 
         mass_spec.reset()
         default_scan = ScanParameters()
@@ -167,6 +167,10 @@ class TopNController(Controller):
 
                 precursor = Precursor(precursor_mz=mz, precursor_intensity=intensity,
                                       precursor_charge=precursor_charge, precursor_scan_id=self.last_ms1_scan.scan_id)
+                if not self._valid_precursor(precursor):
+                    self.logger.debug('Not fragmenting %s because it is below the minimum intensity threshold of %f' %
+                                      (precursor, self.min_ms1_intensity))
+                    continue
 
                 # mz_lower = mz * (1 - self.mz_tol / 1e6)
                 # mz_upper = mz * (1 + self.mz_tol / 1e6)
@@ -208,10 +212,12 @@ class TopNController(Controller):
                 return True
         return False
 
+    def _valid_precursor(self, precursor):
+        return precursor.precursor_intensity > self.min_ms1_intensity
+
 
 class TreeController(Controller):
-    def __init__(self, mass_spec, dia_design, window_type, kaufmann_design, extra_bins, num_windows=None,
-                 min_ms2_intensity=0):
+    def __init__(self, mass_spec, dia_design, window_type, kaufmann_design, extra_bins, num_windows=None):
         super().__init__(mass_spec)
         self.last_ms1_scan = None
         self.dia_design = dia_design
@@ -219,7 +225,6 @@ class TreeController(Controller):
         self.kaufmann_design = kaufmann_design
         self.extra_bins = extra_bins
         self.num_windows = num_windows
-        self.min_ms2_intensity = min_ms2_intensity
 
         mass_spec.reset()
         default_scan = ScanParameters()
