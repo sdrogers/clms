@@ -3,6 +3,7 @@ import logging
 
 from sklearn.externals import joblib
 from bisect import bisect_left
+import collections
 
 # some useful constants
 MZ = 'mz'
@@ -14,6 +15,7 @@ SCAN_DURATION = 'scan_duration'
 POSITIVE = 'positive'
 NEGATIVE = 'negative'
 
+PROTON_MASS = 1.00727645199076
 
 def save_obj(obj, filename, use_joblib=True):
     """
@@ -57,19 +59,29 @@ def chromatogramDensityNormalisation(rts, intensities):
     new_intensities = [x * (1 / area) for x in intensities]
     return new_intensities
 
+# TODO: add other options
+# Note: M+H should come first in this dict because of the prior specification
+POS_TRANSFORMATIONS = collections.OrderedDict()
+POS_TRANSFORMATIONS['M+H'] = lambda mz : (mz + PROTON_MASS)
+POS_TRANSFORMATIONS['[M+ACN]+H'] = lambda mz : (mz + 42.033823)
+POS_TRANSFORMATIONS['[M+CH3OH]+H'] = lambda mz : (mz + 33.033489)
+POS_TRANSFORMATIONS['[M+NH3]+H'] = lambda mz : (mz + 18.033823)
+POS_TRANSFORMATIONS['M+Na'] = lambda mz : (mz + 22.989218)
+POS_TRANSFORMATIONS['M+K'] = lambda mz : (mz + 38.963158)
+POS_TRANSFORMATIONS['M+2Na-H'] = lambda mz : (mz + 44.971160)
+POS_TRANSFORMATIONS['M+ACN+Na'] = lambda mz : (mz + 64.015765)
+POS_TRANSFORMATIONS['M+2Na-H'] = lambda mz : (mz + 44.971160)
+POS_TRANSFORMATIONS['M+2K+H'] = lambda mz : (mz + 76.919040)
+POS_TRANSFORMATIONS['[M+DMSO]+H'] = lambda mz : (mz + 79.02122)
+POS_TRANSFORMATIONS['[M+2ACN]+H'] = lambda mz : (mz + 83.060370)
+POS_TRANSFORMATIONS['2M+H'] = lambda mz : (mz * 2) + 1.007276
+POS_TRANSFORMATIONS['M+ACN+Na'] = lambda mz : (mz + 64.015765)
+POS_TRANSFORMATIONS['2M+NH4'] = lambda mz : (mz * 2) + 18.033823
 
-def adductTransformation(mz, adduct):
-    if adduct == "M+H":
-        return (mz - 1.007276)
-    elif adduct == "[M+ACN]+H":
-        return (mz - 42.03383)
-    elif adduct == "[M+CH3OH]+H":
-        return (mz - 33.03349)
-    elif adduct == "[M+NH3]+H":
-        return (mz - 18.03383)    
-    else:
-        return None
-    # turn this into a proper function
+
+def adduct_transformation(mz, adduct):
+    f = POS_TRANSFORMATIONS[adduct]
+    return f(mz)
 
 
 def takeClosest(myList, myNumber):
@@ -91,15 +103,8 @@ def takeClosest(myList, myNumber):
         return pos - 1
 
 
-def get_logger(name, level=logging.DEBUG):
-    # turn off annoying matplotlib messages
-    if level == logging.DEBUG:
-        mpl_logger = logging.getLogger('matplotlib')
-        mpl_logger.setLevel(logging.WARNING)
-    # initalise basic config for all loggers
-    logging.basicConfig(level=level)
-    logger = logging.getLogger(name)
-    return logger
+def set_log_level_warning():
+    logging.getLogger().setLevel(logging.WARNING)
 
 
 def set_log_level_info():
@@ -108,3 +113,17 @@ def set_log_level_info():
 
 def set_log_level_debug():
     logging.getLogger().setLevel(logging.DEBUG)
+
+
+# see https://stackoverflow.com/questions/3375443/how-to-pickle-loggers
+class LoggerMixin():
+    @property
+    def logger(self):
+        # turn off annoying matplotlib messages
+        mpl_logger = logging.getLogger('matplotlib')
+        mpl_logger.setLevel(logging.WARNING)
+        # initalise basic config for all loggers
+        name = "{}".format(type(self).__name__)
+        logging.basicConfig(level=logging.getLogger().level)
+        logger = logging.getLogger(name)
+        return logger

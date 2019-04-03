@@ -1,15 +1,11 @@
-import sys
-
 import copy
 import re
 import scipy
 import scipy.stats
-from random import sample
 
 from VMSfunctions.ChineseRestaurantProcess import *
 from VMSfunctions.Common import *
 
-logger = get_logger('Chemicals')
 
 class Compound(object):
     def __init__(self, name, chemical_formula, monisotopic_molecular_weight, smiles, inchi, inchikey):
@@ -108,7 +104,7 @@ class Isotopes(object):
 
 class Adducts(object):
     def __init__(self, formula):
-        self.adduct_names = ["M+H", "[M+ACN]+H", "[M+CH3OH]+H", "[M+NH3]+H"]  # TODO: add other options
+        self.adduct_names = list(POS_TRANSFORMATIONS.keys())
         self.formula = formula
 
     def get_adducts(self):
@@ -121,7 +117,9 @@ class Adducts(object):
 
     def _get_adduct_proportions(self):
         # TODO: replace this with something proper
-        proportions = np.random.dirichlet([1,0.1,0.1,0.1]).tolist()
+        prior = np.ones(len(self.adduct_names)) * 0.1
+        prior[0] = 1.0 # give more weight to the first one, i.e. M+H
+        proportions = np.random.dirichlet(prior).tolist()
         return proportions
 
     def _get_adduct_names(self):
@@ -190,12 +188,11 @@ class MSN(Chemical):
         return 'MSN Fragment mz=%.4f ms_level=%d' % (self.isotopes[0][0], self.ms_level)
 
 
-class ChemicalCreator(object):
-    def __init__(self, peak_sampler, chromatograms):
+class ChemicalCreator(LoggerMixin):
+    def __init__(self, peak_sampler):
         self.peak_sampler = peak_sampler
-        self.chromatograms = chromatograms
 
-    def sample(self, rt_range, mz_range, min_ms1_intensity, n_ms1_peaks, ms_levels=2, chemical_type=None,
+    def sample(self, chromatogram_creator, rt_range, mz_range, min_ms1_intensity, n_ms1_peaks, ms_levels=2, chemical_type=None,
                formula_list=None, compound_list=None, alpha=math.inf):
         self.n_ms1_peaks = n_ms1_peaks
         self.ms_levels = ms_levels
@@ -209,27 +206,27 @@ class ChemicalCreator(object):
         if self.ms_levels > 2:
             print("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
         n_ms1 = self._get_n(1)
-        logger.debug("{} ms1 peaks to be created.".format(n_ms1))
+        self.logger.debug("{} ms1 peaks to be created.".format(n_ms1))
         formula = None
         chemicals = []
         sampled_peaks = self.peak_sampler.sample(1, n_ms1, mz_range[0][0], mz_range[0][1], rt_range[0][0], rt_range[0][1], min_ms1_intensity)
         if chemical_type == "Known" and compound_list != None:
             if len(compound_list)<n_ms1:
-                logger.warning('compound_list not long enough')
+                self.logger.warning('compound_list not long enough')
                 return
             self.formula_list = self._sample_formulae(sampled_peaks)
         for i in range(n_ms1):
             if chemical_type == "Known":
                 formula = self.formula_list[i]
-            chrom = self.chromatograms.sample(sampled_peaks[i].intensity)          
+            chrom = chromatogram_creator.sample(sampled_peaks[i].intensity)
             chem = self._get_chemical(1, formula, chrom, sampled_peaks[i])
             chem.children = self._get_children(1, chem)
             chemicals.append(chem)
             if (i/25 == math.floor(i/25)):
-                logger.debug("i = {}".format(i))
+                self.logger.debug("i = {}".format(i))
         return chemicals        
         
-    def sample_from_chromatograms(self, min_rt, max_rt, min_ms1_intensity, ms_levels=2):
+    def sample_from_chromatograms(self, chromatogram_creator, min_rt, max_rt, min_ms1_intensity, ms_levels=2):
         self.ms_levels = ms_levels
         self.min_rt = min_rt
         self.max_rt = max_rt
@@ -241,16 +238,16 @@ class ChemicalCreator(object):
         self.formula_list = None
         if self.ms_levels > 2:
             print("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
-        n_ms1 = len(self.chromatograms.chromatograms)
-        logger.debug("{} ms1 peaks to be created.".format(n_ms1))
+        n_ms1 = len(chromatogram_creator.chromatograms)
+        self.logger.debug("{} ms1 peaks to be created.".format(n_ms1))
         chemicals = []
-        for i in range(len(self.chromatograms.chromatograms)):
-            chem = self.chromatograms.chemicals[i]
+        for i in range(len(chromatogram_creator.chromatograms)):
+            chem = chromatogram_creator.chemicals[i]
             if self._valid_ms1_chem(chem):
                 chem.children = self._get_children(1, chem)
                 chemicals.append(chem)
                 if i % 2500 == 0:
-                    logger.debug("i = {}".format(i))
+                    self.logger.debug("i = {}".format(i))
         return chemicals
     
     def _sample_formulae(self, sampled_peaks):
@@ -266,7 +263,7 @@ class ChemicalCreator(object):
             formula_list.append(compound_list[takeClosest(compound_mass_list, mz_peak_sample)].chemical_formula)
         return formula_list
         
-    def _get_children(self, parent_ms_level, parent):
+    def _get_children(self, parent_ms_level, parent): # TODO: this should be moved to the mass spec class
         children_ms_level = parent_ms_level + 1
         n_peaks = self._get_n(children_ms_level)
         if n_peaks == None:

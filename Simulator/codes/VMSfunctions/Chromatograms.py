@@ -1,13 +1,8 @@
-import logging
-
-import numpy as np
 import pandas as pd
-import scipy
 import scipy.stats
 
-logger = logging.getLogger('Chromatograms')
-from VMSfunctions.Common import *
 from VMSfunctions.Chemicals import *
+
 
 class Chromatogram(object):
 
@@ -26,49 +21,75 @@ class EmpiricalChromatogram(Chromatogram):
     Empirical Chromatograms to be used within Chemicals
     """
 
-    def __init__(self, rts, mzs, intensities):
-        self.rts = [x - min(rts) for x in rts]
-        self.mzs = [x - sum(mzs) / len(mzs) for x in mzs]  # may want to just set this to 0 and remove from input
-        self.intensities = chromatogramDensityNormalisation(rts, intensities)
+    def __init__(self, rts, mzs, intensities, roi=None):
         self.raw_rts = rts
         self.raw_mzs = mzs
         self.raw_intensities = intensities
 
+        # ensures that all arrays are in sorted order
+        p = rts.argsort()
+        rts = rts[p]
+        mzs = mzs[p]
+        intensities = intensities[p]
+
+        # normalise arrays
+        self.rts = rts - min(rts)
+        self.mzs = (mzs - sum(mzs)) / float(len(mzs)) # may want to just set this to 0 and remove from input
+        self.intensities = chromatogramDensityNormalisation(rts, intensities)
+
+        self.roi = roi
+        self.min_rt = min(self.rts)
+        self.max_rt = max(self.rts)
+
     def get_relative_intensity(self, query_rt):
-        if self._rt_match(query_rt) == False:
+        if not self._rt_match(query_rt):
             return None
         else:
-            return ((self.intensities[self._get_rt_neighbours_which(query_rt)[0]] +
-                     (self.intensities[self._get_rt_neighbours_which(query_rt)[1]]
-                      - self.intensities[self._get_rt_neighbours_which(query_rt)[0]]) * self._get_distance(query_rt)))
+            neighbours_which = self._get_rt_neighbours_which(query_rt)
+            intensity_below = self.intensities[neighbours_which[0]]
+            intensity_above = self.intensities[neighbours_which[1]]
+            return intensity_below + (intensity_above - intensity_below) * self._get_distance(query_rt)
 
     def get_relative_mz(self, query_rt):
-        if self._rt_match(query_rt) == False:
+        if not self._rt_match(query_rt):
             return None
         else:
-            return ((self.mzs[self._get_rt_neighbours_which(query_rt)[0]] +
-                     (self.mzs[self._get_rt_neighbours_which(query_rt)[1]]
-                      - self.mzs[self._get_rt_neighbours_which(query_rt)[0]]) * self._get_distance(query_rt)))
+            neighbours_which = self._get_rt_neighbours_which(query_rt)
+            mz_below = self.mzs[neighbours_which[0]]
+            mz_above = self.mzs[neighbours_which[1]]
+            return mz_below + (mz_above - mz_below) * self._get_distance(query_rt)
 
     def _get_rt_neighbours(self, query_rt):
-        rt_below = max(x for x in self.rts if x <= query_rt)
-        rt_above = min(x for x in self.rts if x >= query_rt)
-        return ([rt_below, rt_above])
+        which_rt_below, which_rt_above = self._get_rt_neighbours_which(query_rt)
+        rt_below = self.rts[which_rt_below]
+        rt_above = self.rts[which_rt_above]
+        return [rt_below, rt_above]
 
     def _get_rt_neighbours_which(self, query_rt):
-        which_rt_below = self.rts.index(self._get_rt_neighbours(query_rt)[0])
-        which_rt_above = self.rts.index(self._get_rt_neighbours(query_rt)[1])
-        return ([which_rt_below, which_rt_above])
+        # find the max index of self.rts smaller than query_rt
+        pos = np.where(self.rts <= query_rt)[0]
+        which_rt_below = pos[-1]
+
+        # take the min index of self.rts larger than query_rt
+        pos = np.where(self.rts >= query_rt)[0]
+        which_rt_above = pos[0]
+        return [which_rt_below, which_rt_above]
 
     def _get_distance(self, query_rt):
-        return ((query_rt - self._get_rt_neighbours(query_rt)[0]) /
-                (self._get_rt_neighbours(query_rt)[1] - self._get_rt_neighbours(query_rt)[0]))
+        rt_below, rt_above = self._get_rt_neighbours(query_rt)
+        return (query_rt - rt_below) / (rt_above - rt_below)
 
     def _rt_match(self, query_rt):
-        if query_rt < min(self.rts) or query_rt > max(self.rts):
-            return False
-        else:
-            return True
+        return self.min_rt < query_rt < self.max_rt
+
+    def __eq__(self, other):
+        if not isinstance(other, EmpiricalChromatogram):
+            # don't attempt to compare against unrelated types
+            return NotImplemented
+
+        return np.array_equal(sorted(self.raw_mzs), sorted(other.raw_mzs)) and \
+                np.array_equal(sorted(self.raw_rts), sorted(other.raw_rts)) and \
+                np.array_equal(sorted(self.raw_intensities), sorted(other.raw_intensities))
 
 
 # Make this more generalisable. Make scipy.stats... as input, However this makes it difficult to do the cutoff
@@ -108,10 +129,10 @@ class FunctionalChromatogram(Chromatogram):
             return True
 
 
-class ChromatogramCreator(object):
-    def __init__(self, xcms_output):
+class ChromatogramCreator(LoggerMixin):
+    def __init__(self, xcms_output, correction_func=None):
         # load the chromatograms and sort by intensity ascending
-        chromatograms, chemicals = self._load_chromatograms(xcms_output)
+        chromatograms, chemicals = self._load_chromatograms(xcms_output, correction_func)
         max_intensities = np.array([max(c.raw_intensities) for c in chromatograms])
         idx = np.argsort(max_intensities)
         self.chromatograms = chromatograms[idx]
@@ -130,7 +151,7 @@ class ChromatogramCreator(object):
             selected = takeClosest(self.max_intensities, intensity)
         return self.chromatograms[selected]
 
-    def _load_chromatograms(self, xcms_output):
+    def _load_chromatograms(self, xcms_output, correction_func):
         """
         Load CSV file of chromatogram information exported by the XCMS script 'process_data.R'
         :param df_file: the input csv file exported by the script (in gzip format)
@@ -143,15 +164,15 @@ class ChromatogramCreator(object):
         chems = []
         for i in range(len(peak_ids)):
             if i % 5000 == 0:
-                logger.debug('Loading {} chromatograms'.format(i))
+                self.logger.debug('Loading {} chromatograms'.format(i))
             pid = peak_ids[i]
-            chrom, chem = self._get_xcms_chromatograms(groups, pid)
+            chrom, chem = self._get_xcms_chromatograms(groups, pid, correction_func)
             if len(chrom.rts) > 1:  # chromatograms should have more than one single data point
                 chroms.append(chrom)
                 chems.append(chem)
         return np.array(chroms), np.array(chems)
 
-    def _get_xcms_chromatograms(self, groups, pid):
+    def _get_xcms_chromatograms(self, groups, pid, correction_func):
         selected = groups.get_group(pid)
         mz = self._get_value(selected, 'mz')
         rt = self._get_value(selected, 'rt')
@@ -161,6 +182,8 @@ class ChromatogramCreator(object):
         intensities = self._get_values(selected, 'intensity_values')
         assert len(rts) == len(mzs)
         assert len(rts) == len(intensities)
+        if correction_func is not None:
+            mz, mzs = correction_func(mz, mzs)
         chrom = EmpiricalChromatogram(rts, mzs, intensities)
         chem = UnknownChemical(mz, rt, max_intensity, chrom, None)
         return chrom, chem

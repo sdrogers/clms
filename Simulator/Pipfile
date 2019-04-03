@@ -20,6 +20,9 @@ events = "*"
 psims = "*"
 tornado = "==4.5.3"
 pynumpress = "*"
+tqdm = "*"
+joblib = "*"
+ipyparallel = "*"
 
 [dev-packages]
 
