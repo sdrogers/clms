@@ -1,9 +1,10 @@
-import pickle
-import logging
-
-from sklearn.externals import joblib
-from bisect import bisect_left
 import collections
+import gzip
+import logging
+import pickle
+
+from bisect import bisect_left
+from sklearn.externals import joblib
 
 # some useful constants
 MZ = 'mz'
@@ -17,36 +18,36 @@ NEGATIVE = 'negative'
 
 PROTON_MASS = 1.00727645199076
 
-def save_obj(obj, filename, use_joblib=True):
+
+def save_obj(obj, filename):
     """
     Save object to file
     :param obj: the object to save
     :param filename: the output file
-    :param use_joblib: if true, use joblib to dump the model
     :return: None
     """
-    with open(filename, 'wb') as f:
-        if use_joblib:
-            # Supposedly using joblib works better for numpy array, see:
-            # - https://scikit-learn.org/stable/modules/model_persistence.html
-            # - http://gael-varoquaux.info/programming/new_low-overhead_persistence_in_joblib_for_big_data.html
+    try:
+        with gzip.GzipFile(filename, 'w') as f:
+            pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
+    except OSError:
+        logging.getLogger().warning('Old pickle format detected. Please regenerate this file.')
+        with open(filename, 'wb') as f:
             joblib.dump(obj, f, compress=3)
-        else:
-            pickle.dump(obj, f)
 
 
-def load_obj(filename, use_joblib=True):
+def load_obj(filename):
     """
     Load saved object from file
     :param filename: The file to load
-    :param use_joblib: If true, use joblib to load the model
     :return: the loaded object
     """
-    with open(filename, 'rb') as f:
-        if use_joblib:
-            return joblib.load(f)
-        else:
+    try:
+        with gzip.GzipFile(filename, 'rb') as f:
             return pickle.load(f)
+    except OSError:
+        logging.getLogger().warning('Old pickle format detected. Please regenerate this file.')
+        with open(filename, 'rb') as f:
+            return joblib.load(f)
 
 
 def chromatogramDensityNormalisation(rts, intensities):
