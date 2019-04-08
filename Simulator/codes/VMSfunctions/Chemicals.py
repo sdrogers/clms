@@ -356,3 +356,102 @@ class ChemicalCreator(LoggerMixin):
         elif chem.rt > self.max_rt:
             return False
         return True
+
+
+class MultiSampleCreator(LoggerMixin):
+    
+    def __init__(self, original_dataset, n_samples, classes, intensity_noise_sd,
+                 change_probabilities, change_differences_means, change_differences_sds, dropout_probabilities = None,
+                 experimental_classes = None, experimental_probabilitities = None, experimental_sds = None):
+        self.original_dataset = original_dataset
+        self.n_samples = n_samples
+        self.classes = classes
+        self.intensity_noise_sd = intensity_noise_sd
+        self.change_probabilities = change_probabilities
+        self.change_differences_means = change_differences_means
+        self.change_differences_sds = change_differences_sds
+        self.dropout_probabilities = dropout_probabilities
+        self.experimental_classes = experimental_classes
+        self.experimental_probabilitities = experimental_probabilitities
+        self.experimental_sds = experimental_sds
+        
+        self.sample_classes = []
+        for index_classes in range(len(self.classes)):
+            self.sample_classes.extend([self.classes[index_classes] for i in range(n_samples[index_classes])])
+        self.chemical_statuses = self._get_chemical_statuses()
+        self.chemical_differences_from_class1 = self._get_chemical_differences_from_class1()
+        if self.experimental_classes is not None:
+            self.sample_experimental_statuses = self._get_experimental_statuses()
+            self.experimental_effects = self._get_experimental_effects()
+        self.logger.debug("Classes, Statuses and Differences defined.")
+        
+        self.samples = []
+        for index_sample in range(sum(self.n_samples)):
+            self.logger.debug("Dataset {} of {} created.".format(index_sample+1,sum(self.n_samples)))
+            new_sample = copy.deepcopy(self.original_dataset)
+            which_class = np.where(np.array(self.classes) == self.sample_classes[index_sample])
+            for index_chemical in range(len(new_sample)):
+                if not np.array(self.chemical_statuses)[which_class][0][index_chemical] == "missing":
+                    original_intensity = new_sample[index_chemical].max_intensity
+                    intensity = self._get_intensity(original_intensity, which_class, index_chemical)
+                    adjusted_intensity = self._get_experimental_factor_effect(intensity, index_sample, index_chemical)
+                    noisy_adjusted_intensity = self._get_noisy_intensity(adjusted_intensity)
+                    new_sample[index_chemical].max_intensity = noisy_adjusted_intensity.tolist()[0]
+            chemicals_to_keep = np.where((np.array(self.chemical_statuses)[which_class][0])!="missing")
+            new_sample = np.array(new_sample)[chemicals_to_keep].tolist()
+            self.samples.append(new_sample)
+            
+    def _get_chemical_statuses(self):
+        chemical_statuses = [np.array(["unchanged" for i in range(len(self.original_dataset))])]
+        chemical_statuses.extend([np.random.choice(["changed","unchanged"],len(self.original_dataset),p =[self.change_probabilities[i],1 - self.change_probabilities[i]]) for i in range(len(self.classes)-1)])
+        if self.dropout_probabilities is not None:
+            for index_chemical in range(len(chemical_statuses)):
+                missing = np.where(np.random.binomial(1,self.dropout_probabilities[index_chemical], len(chemical_statuses[index_chemical])))
+                chemical_statuses[index_chemical][missing] = "missing"
+        return chemical_statuses
+    
+    def _get_experimental_statuses(self):
+            experimental_statuses = []
+            for i in range(len(self.experimental_classes)):
+                class_allocation = np.random.choice(self.experimental_classes[i],sum(self.n_samples),p =self.experimental_probabilitities[i])
+                experimental_statuses.append(class_allocation)
+            return experimental_statuses
+        
+    def _get_experimental_effects(self):
+        experimental_effects = []
+        for i in range(len(self.experimental_classes)):
+            coef = [np.random.normal(0,self.experimental_sds[i],len(self.experimental_classes[i])) for j in range(len(self.original_dataset))]
+            experimental_effects.append(coef)
+        return experimental_effects
+    
+    def _get_chemical_differences_from_class1(self):
+        chemical_differences_from_class1 = [np.array([0 for i in range(len(self.original_dataset))]) for j in range(len(self.classes))]
+        for index_classes in range(1,len(self.classes)):
+            coef_mean = self.change_differences_means[index_classes-1]
+            coef_sd = self.change_differences_sds[index_classes-1]
+            coef_len = sum(self.chemical_statuses[index_classes]=="changed")
+            coef = np.random.normal(coef_mean, coef_sd, coef_len)
+            chemical_differences_from_class1[index_classes][np.where(self.chemical_statuses[index_classes]=="changed")] = coef
+        return chemical_differences_from_class1
+        
+    def _get_intensity(self,original_intensity, which_class, index_chemical):
+        intensity = original_intensity + self.chemical_differences_from_class1[which_class[0][0]][index_chemical]
+        return intensity
+    
+    def _get_experimental_factor_effect(self, intensity, index_sample, index_chemical):
+        experimental_factor_effect = 0.0
+        if self.experimental_classes == None:
+            return intensity
+        else:
+            for index_factor in range(len(self.experimental_classes)):
+                which_experimental_status = self.sample_experimental_statuses[index_factor][index_sample]
+                which_experimental_class = np.where(np.array(self.experimental_classes[index_factor])==which_experimental_status)
+                experimental_factor_effect += self.experimental_effects[index_factor][index_chemical][which_experimental_class]        
+        return intensity + experimental_factor_effect
+    
+    def _get_noisy_intensity(self,adjusted_intensity):
+        noisy_intensity = adjusted_intensity + np.random.normal(0,self.intensity_noise_sd[0],1)
+        if noisy_intensity < 0:
+            print("Warning: Negative Intensities have been created")
+        return noisy_intensity
+        
