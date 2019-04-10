@@ -1,4 +1,4 @@
-centWave_new_modified = function (mz, int, scantime, valsPerSpect, ppm = 25, peakwidth = c(20, 
+centWave_new_modified = function (rawData, mz, int, scantime, valsPerSpect, ppm = 25, peakwidth = c(20, 
                                                                    50), snthresh = 10, prefilter = c(3, 100), mzCenterFun = "wMean", 
           integrate = 1, mzdiff = -0.001, fitgauss = FALSE, noise = 0, 
           sleep = 0, verboseColumns = FALSE, roiList = list(), firstBaselineCheck = TRUE, 
@@ -286,7 +286,7 @@ centWave_new_modified = function (mz, int, scantime, valsPerSpect, ppm = 25, pea
   library(readr)
   
   df = map_dfr(roiList, function(x) {
-    fn = basename(fileNames(object)[fData(object)[x$scmax,'fileIdx']])
+    fn = basename(fileNames(rawData)[fData(rawData)[x$scmax,'fileIdx']])
     tibble(file=fn, mzmin=x$mzmin, mzmax=x$mzmax, scmin=x$scmin, scmax=x$scmax, rtmin=scantime[x$scmin], rtmax=scantime[x$scmax], pickedPeak=x$pickedPeak)
   })
   return(df)

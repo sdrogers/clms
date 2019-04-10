@@ -158,12 +158,6 @@ write_df <- function(df, filename) {
 
 ### processing starts here ###
 
-mzml_dir <- 'C:\\Users\\joewa\\Work\\docs\\clms\\Beers_4Beers_compared\\Positive\\samples\\mzML'
-mzml_files <- dir(mzml_dir, full.names=TRUE)
-filtered_idx = !grepl("desktop.ini", mzml_files) # exclude 'desktop.ini' on windows
-mzml_files <- mzml_files[filtered_idx]
-design <- getDesign(mzml_files, "BEER")
-
 # ppm value is set fairly large.
 # Other parameters for peakwidth, snthresh, prefilter for justin's data, taken from 
 # https://www.dropbox.com/home/Meta_clustering/ms2lda/large_study/r/beer_method_3_pos?preview=xcmsPeakPicking.R
@@ -175,7 +169,25 @@ mzdiff = 0.001
 mzppm <- 10 # the ppm value used to draw the bounding box to retrieve chromatographic peak
 make_plot = FALSE
 
+# run for beer1pos only
+mzml_dir <- 'C:\\Users\\joewa\\University of Glasgow\\Vinny Davies - CLDS Metabolomics Project\\Data\\multibeers_urine_data\\beers\\fullscan'
+mzml_files <- list.files(path=mzml_dir, pattern='*.mzML', full.names=TRUE)
+mzml_files = mzml_files[1]
+design <- getDesign(mzml_files, "group1")
+
+outfile <- 'C:\\Users\\joewa\\University of Glasgow\\Vinny Davies - CLDS Metabolomics Project\\Trained Models\\chromatogram_beer1pos.csv.gz'
 data <- extract_peaks(mzml_files, design, ppm, peakwidth, snthresh, prefilter, mzdiff)
 ms1_features <- extract_features(data, mzppm, make_plot)
 df = get_df(ms1_features)
-write_df(df, 'beer_ms1_peaks.csv.gz')
+write_df(df, outfile)
+
+# run for all 19 beers
+mzml_dir <- 'C:\\Users\\joewa\\University of Glasgow\\Vinny Davies - CLDS Metabolomics Project\\Data\\multibeers_urine_data\\beers\\fullscan'
+mzml_files <- list.files(path=mzml_dir, pattern='*.mzML', full.names=TRUE)
+design <- getDesign(mzml_files, "group1")
+
+outfile <- 'C:\\Users\\joewa\\University of Glasgow\\Vinny Davies - CLDS Metabolomics Project\\Trained Models\\chromatogram_19_beers.csv.gz'
+data <- extract_peaks(mzml_files, design, ppm, peakwidth, snthresh, prefilter, mzdiff)
+ms1_features <- extract_features(data, mzppm, make_plot)
+df = get_df(ms1_features)
+write_df(df, outfile)
