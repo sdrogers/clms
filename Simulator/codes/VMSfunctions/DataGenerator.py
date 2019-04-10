@@ -159,7 +159,7 @@ class DataSource(LoggerMixin):
         axarr[1].plot(peak.rt_values, peak.mz_values, linestyle='None', marker='o', markersize=1.0, color='b')
 
     def get_data(self, data_type, filename, ms_level, min_intensity=None,
-                 min_rt=None, max_rt=None, log=False):
+                 min_rt=None, max_rt=None, log=False, max_data=100000):
         """
         Retrieves values as numpy array
         :param data_type: data_type is 'mz', 'rt', 'intensity' or 'n_peaks'
@@ -202,16 +202,36 @@ class DataSource(LoggerMixin):
                     n_peaks = len(spectrum_peaks)
                     if n_peaks > 0:
                         values.append(n_peaks)
+                elif data_type == MZ_INTENSITY:
+                    mzs = list(getattr(x, MZ) for x in spectrum_peaks)
+                    intensities = list(getattr(x, INTENSITY) for x in spectrum_peaks)
+                    values.extend(list(zip(mzs, intensities)))
                 else:
                     attrs = list(getattr(x, data_type) for x in spectrum_peaks)
                     values.extend(attrs)
 
-        # return values
-        # convert into Nx1 array and also log-transform if necessary
-        X = np.array(values)[:, np.newaxis]
+        # log-transform if necessary
+        X = np.array(values)
         if log:
-            X = np.log(X)
-        return X
+            if data_type == MZ_INTENSITY: # just log the intensity part
+                X[:, 1] = np.log(X[:, 1])
+            else:
+                X = np.log(X)
+
+        # pick random samples
+        try:
+            idx = np.arange(len(X))
+            rnd_idx = np.random.choice(idx, size=int(max_data), replace=False)
+            sampled_X = X[rnd_idx]
+        except ValueError:
+            sampled_X = X
+
+        # return values
+        if data_type == MZ_INTENSITY:
+            return sampled_X # it's already a Nx2 array
+        else:
+            # convert into Nx1 array
+            return sampled_X[:, np.newaxis]
 
     def extract_roi(self, roi_file, min_rt=None, max_rt=None):
         self.roi_df = pd.read_csv(roi_file)
@@ -318,7 +338,7 @@ class DataSource(LoggerMixin):
         return rois
 
 
-class DensityEstimator(object):
+class DensityEstimator(LoggerMixin):
     """A class to perform kernel density estimation. Takes as input a DataSource class."""
 
     def __init__(self, min_ms1_intensity, min_ms2_intensity, min_rt, max_rt, plot=False):
@@ -331,7 +351,7 @@ class DensityEstimator(object):
         self.plot = plot
 
     def kde(self, data_source, filename, ms_level, bandwidth_mz=1.0, bandwidth_intensity=0.01,
-            bandwidth_rt=5.0, bandwidth_n_peaks=1.0, bandwidth_scan_durations=0.01):
+            bandwidth_rt=5.0, bandwidth_n_peaks=1.0, bandwidth_scan_durations=0.01, max_data=100000):
         params = [
             {'data_type': MZ, 'bandwidth': bandwidth_mz},
             {'data_type': INTENSITY, 'bandwidth': bandwidth_intensity},
@@ -347,7 +367,7 @@ class DensityEstimator(object):
             min_intensity = self.min_ms1_intensity if ms_level == 1 else self.min_ms2_intensity
             log = True if data_type == INTENSITY else False
             X = data_source.get_data(data_type, filename, ms_level, min_intensity=min_intensity,
-                                     min_rt=self.min_rt, max_rt=self.max_rt, log=log)
+                                     min_rt=self.min_rt, max_rt=self.max_rt, log=log, max_data=max_data)
             self.logger.debug('Retrieved %s values' % str(X.shape))
 
             # fit kde
@@ -392,7 +412,7 @@ class DensityEstimator(object):
             plt.show()
 
 
-class PeakDensityEstimator(object):
+class PeakDensityEstimator(LoggerMixin):
     """A class to perform better kernel density estimation for peak data. Takes as input a DataSource class."""
 
     def __init__(self, min_ms1_intensity, min_ms2_intensity, min_rt, max_rt, plot=False):
@@ -405,7 +425,7 @@ class PeakDensityEstimator(object):
         self.plot = plot
 
     def kde(self, data_source, filename, ms_level, bandwidth_mz_intensity=1.0,
-            bandwidth_rt=5.0, bandwidth_n_peaks=1.0, bandwidth_scan_durations=0.01):
+            bandwidth_rt=5.0, bandwidth_n_peaks=1.0, bandwidth_scan_durations=0.01, max_data=100000):
         params = [
             {'data_type': MZ_INTENSITY, 'bandwidth': bandwidth_mz_intensity},
             {'data_type': RT, 'bandwidth': bandwidth_rt},
@@ -418,15 +438,9 @@ class PeakDensityEstimator(object):
             # get data
             self.logger.debug('Retrieving %s values from %s' % (data_type, data_source))
             min_intensity = self.min_ms1_intensity if ms_level == 1 else self.min_ms2_intensity
-            if data_type == MZ_INTENSITY:
-                mz = data_source.get_data(MZ, filename, ms_level, min_intensity=min_intensity,
-                                          min_rt=self.min_rt, max_rt=self.max_rt, log=False)
-                intensity = data_source.get_data(INTENSITY, filename, ms_level, min_intensity=min_intensity,
-                                          min_rt=self.min_rt, max_rt=self.max_rt, log=True)
-                X = np.concatenate((mz, intensity), axis=1)
-            else:
-                X = data_source.get_data(data_type, filename, ms_level, min_intensity=min_intensity,
-                                          min_rt=self.min_rt, max_rt=self.max_rt, log=False)
+            log = True if data_type == MZ_INTENSITY else False
+            X = data_source.get_data(data_type, filename, ms_level, min_intensity=min_intensity,
+                                      min_rt=self.min_rt, max_rt=self.max_rt, log=log, max_data=max_data)
 
             # fit kde
             bandwidth = param['bandwidth']
@@ -464,7 +478,7 @@ class PeakDensityEstimator(object):
                 plt.show()
 
 
-class PeakSampler(object):
+class PeakSampler(LoggerMixin):
     """A class to sample peaks from a trained density estimator"""
 
     def __init__(self, density_estimator):
