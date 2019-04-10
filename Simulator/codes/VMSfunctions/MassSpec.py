@@ -14,7 +14,7 @@ from VMSfunctions.DataGenerator import Peak
 
 
 class Scan(object):
-    def __init__(self, scan_id, mzs, intensities, ms_level, rt, density=None):
+    def __init__(self, scan_id, mzs, intensities, ms_level, rt, density=None, isolation_windows = None):
         assert len(mzs) == len(intensities)
         self.scan_id = scan_id
 
@@ -29,6 +29,7 @@ class Scan(object):
 
         self.density = density
         self.scan_duration = self._get_scan_duration()
+        self.isolation_windows = isolation_windows
 
     def filter_intensity(self, min_intensity):
         keep = self.intensities > min_intensity
@@ -223,7 +224,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
         scan_mzs = np.array(scan_mzs)
         scan_intensities = np.array(scan_intensities)
         return Scan(self.idx, scan_mzs, scan_intensities, ms_level, scan_time,
-                    density=self.density)
+                    density=self.density, isolation_windows=isolation_windows)
 
     def _get_chem_indices(self, query_rt):
         rtmin_check = self.chrom_min_rts <= query_rt
