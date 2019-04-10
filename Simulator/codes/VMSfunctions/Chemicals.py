@@ -193,7 +193,7 @@ class ChemicalCreator(LoggerMixin):
         self.peak_sampler = peak_sampler
 
     def sample(self, chromatogram_creator, rt_range, mz_range, min_ms1_intensity, n_ms1_peaks, ms_levels=2, chemical_type=None,
-               formula_list=None, compound_list=None, alpha=math.inf):
+               formula_list=None, compound_list=None, alpha=math.inf, fixed_mz=False):
         self.n_ms1_peaks = n_ms1_peaks
         self.ms_levels = ms_levels
         self.formula_list = formula_list
@@ -202,6 +202,7 @@ class ChemicalCreator(LoggerMixin):
         self.crp_samples = [[] for i in range(self.ms_levels)]
         self.crp_index = [[] for i in range(self.ms_levels)]
         self.alpha = alpha
+        self.fixed_mz = fixed_mz
         self.counts = [[] for i in range(self.ms_levels)]
         if self.ms_levels > 2:
             print("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
@@ -219,6 +220,8 @@ class ChemicalCreator(LoggerMixin):
             if chemical_type == "Known":
                 formula = self.formula_list[i]
             chrom = chromatogram_creator.sample(sampled_peaks[i].intensity)
+            if self.fixed_mz == True:
+                chrom.mzs = [0 for i in range(len(chrom.raw_mzs))]
             chem = self._get_chemical(1, formula, chrom, sampled_peaks[i])
             chem.children = self._get_children(1, chem)
             chemicals.append(chem)
