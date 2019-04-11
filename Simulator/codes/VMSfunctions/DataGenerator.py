@@ -255,7 +255,7 @@ class DataSource(LoggerMixin):
             df = self.roi_df[self.roi_df['file'] == fname]
             for idx, row in df.iterrows(): # TODO: make this faster
                 if (idx % 10000 == 0):
-                    self.logger.debug('%6d/%6d' % (idx, df.shape[0]))
+                    self.logger.debug('%6d/%6d' % (len(rois_data['rois']), df.shape[0]))
                 file_name = row['file']
                 mzmin = row['mzmin']
                 mzmax = row['mzmax']
