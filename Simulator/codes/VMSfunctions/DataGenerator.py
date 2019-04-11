@@ -297,7 +297,7 @@ class DataSource(LoggerMixin):
 
         # assign raw spectrum peaks to ROI
         for fname in roi_filenames:
-            rois_data = self.all_rois[filename]
+            rois_data = self.all_rois[fname]
             self.logger.info('Populating ROI objects for %s' % fname)
 
             # get spectra for a file
