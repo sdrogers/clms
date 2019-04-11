@@ -30,7 +30,7 @@ def save_obj(obj, filename):
         with gzip.GzipFile(filename, 'w') as f:
             pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
     except OSError:
-        logging.getLogger().warning('Old pickle format detected. Please regenerate this file.')
+        logging.getLogger().warning('Old, invalid or missing pickle in %s. Please regenerate this file.' % filename)
         with open(filename, 'wb') as f:
             joblib.dump(obj, f, compress=3)
 
@@ -45,7 +45,7 @@ def load_obj(filename):
         with gzip.GzipFile(filename, 'rb') as f:
             return pickle.load(f)
     except OSError:
-        logging.getLogger().warning('Old pickle format detected. Please regenerate this file.')
+        logging.getLogger().warning('Old, invalid or missing pickle in %s. Please regenerate this file.' % filename)
         with open(filename, 'rb') as f:
             return joblib.load(f)
 

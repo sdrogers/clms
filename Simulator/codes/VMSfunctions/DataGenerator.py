@@ -233,13 +233,16 @@ class DataSource(LoggerMixin):
             # convert into Nx1 array
             return sampled_X[:, np.newaxis]
 
-    def extract_roi(self, roi_file, min_rt=None, max_rt=None):
+    def extract_roi(self, roi_file, min_rt=None, max_rt=None, filename=None):
         self.roi_df = pd.read_csv(roi_file)
-        roi_filenames = self.roi_df['file'].unique()
+        if filename is None:
+            roi_filenames = self.roi_df['file'].unique()
+        else:
+            roi_filenames = np.array([filename])
 
         # convert each row in the dataframe to a ROI object
-        for filename in roi_filenames:
-            self.logger.info('Creating ROI objects for %s' % filename)
+        for fname in roi_filenames:
+            self.logger.info('Creating ROI objects for %s' % fname)
             rois_data = {
                 'rois': [],
                 'mzmin': [],
@@ -249,9 +252,10 @@ class DataSource(LoggerMixin):
             }
 
             # convert each row of the dataframe to roi objects
-            for idx, row in self.roi_df.iterrows(): # TODO: make this faster
-                if (idx % 50000 == 0):
-                    self.logger.debug('%6d/%6d' % (idx, self.roi_df.shape[0]))
+            df = self.roi_df[self.roi_df['file'] == fname]
+            for idx, row in df.iterrows(): # TODO: make this faster
+                if (idx % 10000 == 0):
+                    self.logger.debug('%6d/%6d' % (idx, df.shape[0]))
                 file_name = row['file']
                 mzmin = row['mzmin']
                 mzmax = row['mzmax']
@@ -275,8 +279,8 @@ class DataSource(LoggerMixin):
             rois_data['mzmax'] = np.array(rois_data['mzmax'])
             rois_data['rtmin'] = np.array(rois_data['rtmin'])
             rois_data['rtmax'] = np.array(rois_data['rtmax'])
-            self.all_rois[filename] = rois_data
-            self.logger.info('Extracted %d ROIs for %s' % (len(rois_data['rois']), filename))
+            self.all_rois[fname] = rois_data
+            self.logger.info('Extracted %d ROIs for %s' % (len(rois_data['rois']), fname))
 
     def _valid_roi(self, roi, min_rt=None, max_rt=None):
         if min_rt is not None and roi.rtrange[0] < min_rt:
@@ -285,16 +289,19 @@ class DataSource(LoggerMixin):
             return False
         return True
 
-    def populate_roi(self):
-        unique_filenames = self.roi_df['file'].unique()
+    def populate_roi(self, filename=None):
+        if filename is None:
+            roi_filenames = self.roi_df['file'].unique()
+        else:
+            roi_filenames = np.array([filename])
 
         # assign raw spectrum peaks to ROI
-        for filename in unique_filenames:
+        for fname in roi_filenames:
             rois_data = self.all_rois[filename]
-            self.logger.info('Populating ROI objects for %s' % filename)
+            self.logger.info('Populating ROI objects for %s' % fname)
 
             # get spectra for a file
-            spectra = self.file_spectra[filename]
+            spectra = self.file_spectra[fname]
             for scan_id, spectrum in spectra.items(): # loop over all scans
                 if scan_id % 100 == 0:
                     self.logger.debug('%6d/%6d processing spectrum %s' % (scan_id, len(spectra), spectrum))
