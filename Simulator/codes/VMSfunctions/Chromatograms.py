@@ -165,7 +165,7 @@ class ChromatogramCreator(LoggerMixin):
         chems = []
         for i in range(len(peak_ids)):
             if i % 5000 == 0:
-                self.logger.debug('Loading {} chromatograms'.format(i))
+                self.logger.info('Loading {} chromatograms'.format(i))
 
             # raise numpy warning as exception, see https://stackoverflow.com/questions/15933741/how-do-i-catch-a-numpy-warning-like-its-an-exception-not-just-for-testing
             with np.errstate(divide='raise'):
@@ -176,6 +176,8 @@ class ChromatogramCreator(LoggerMixin):
                         chroms.append(chrom)
                         chems.append(chem)
                 except FloatingPointError:
+                    self.logger.debug('Invalid chromatogram {}'.format(i))
+                except ZeroDivisionError:
                     self.logger.debug('Invalid chromatogram {}'.format(i))
 
         return np.array(chroms), np.array(chems)
