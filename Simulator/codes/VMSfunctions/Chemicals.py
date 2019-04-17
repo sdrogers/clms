@@ -103,9 +103,10 @@ class Isotopes(object):
 
 
 class Adducts(object):
-    def __init__(self, formula):
+    def __init__(self, formula, adduct_proportion_cutoff = 0.05):
         self.adduct_names = list(POS_TRANSFORMATIONS.keys())
         self.formula = formula
+        self.adduct_proportion_cutoff = adduct_proportion_cutoff
 
     def get_adducts(self):
         adducts = []
@@ -119,7 +120,12 @@ class Adducts(object):
         # TODO: replace this with something proper
         prior = np.ones(len(self.adduct_names)) * 0.1
         prior[0] = 1.0 # give more weight to the first one, i.e. M+H
-        proportions = np.random.dirichlet(prior).tolist()
+        proportions = np.random.dirichlet(prior)
+        while max(proportions) < 0.2:
+            proportions = np.random.dirichlet(prior)
+        proportions[np.where(proportions<self.adduct_proportion_cutoff)] = 0
+        proportions = proportions/max(proportions)
+        proportions.tolist()
         return proportions
 
     def _get_adduct_names(self):
@@ -192,8 +198,8 @@ class ChemicalCreator(LoggerMixin):
     def __init__(self, peak_sampler):
         self.peak_sampler = peak_sampler
 
-    def sample(self, chromatogram_creator, rt_range, mz_range, min_ms1_intensity, n_ms1_peaks, ms_levels=2, chemical_type=None,
-               formula_list=None, compound_list=None, alpha=math.inf, fixed_mz=False):
+    def sample(self, chromatogram_creator, mz_range, rt_range, min_ms1_intensity, n_ms1_peaks, ms_levels=2, chemical_type=None,
+               formula_list=None, compound_list=None, alpha=math.inf, fixed_mz=False, adduct_proportion_cutoff = 0.05):
         self.n_ms1_peaks = n_ms1_peaks
         self.ms_levels = ms_levels
         self.formula_list = formula_list
@@ -203,6 +209,7 @@ class ChemicalCreator(LoggerMixin):
         self.crp_index = [[] for i in range(self.ms_levels)]
         self.alpha = alpha
         self.fixed_mz = fixed_mz
+        self.adduct_proportion_cutoff = adduct_proportion_cutoff
         self.counts = [[] for i in range(self.ms_levels)]
         if self.ms_levels > 2:
             print("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
@@ -329,7 +336,7 @@ class ChemicalCreator(LoggerMixin):
         intensity = sampled_peak.intensity
         formula = Formula(formula)
         isotopes = Isotopes(formula)
-        adducts = Adducts(formula)
+        adducts = Adducts(formula, self.adduct_proportion_cutoff)
         return KnownChemical(formula, isotopes, adducts, rt, intensity, chromatogram, None)
 
     def _get_unknown_msn(self, ms_level, chromatogram, sampled_peak, parent=None):
