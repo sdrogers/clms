@@ -23,6 +23,7 @@ pynumpress = "*"
 tqdm = "*"
 joblib = "*"
 ipyparallel = "*"
+seaborn = "*"
 
 [dev-packages]
 
