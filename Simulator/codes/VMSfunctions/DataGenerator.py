@@ -112,7 +112,7 @@ class DataSource(LoggerMixin):
         :param mzml_path: the input folder containing the mzML files
         :return: nothing, but the instance variable file_spectra and scan_durations are populated
         """
-        scan_durations = defaultdict(list) # durations per scan for each ms level
+        file_scan_durations = {} # key: filename, value: a dict where key is ms level and value is scan durations
         file_spectra = {} # key: filename, value: a dict where key is scan_number and value is spectrum
         for filename in glob.glob(os.path.join(mzml_path, '*.mzML')):
             run = pymzml.run.Reader(filename, obo_version=self.obo_version,
@@ -122,6 +122,10 @@ class DataSource(LoggerMixin):
             fname = os.path.basename(filename)
             self.logger.info('Loading %s' % fname)
             file_spectra[fname] = {}
+            file_scan_durations[fname] = {
+                1: [],
+                2: []
+            }
             start_time = 0
             for scan_number, spectrum in enumerate(run):
                 file_spectra[fname][scan_number] = spectrum
@@ -133,10 +137,10 @@ class DataSource(LoggerMixin):
                 # store the scan duration of each spectrum
                 end_time = rt
                 duration = end_time - start_time
-                scan_durations[ms_level].append(duration)
+                file_scan_durations[fname][ms_level].append(duration)
                 start_time = end_time
 
-        self.scan_durations = scan_durations
+        self.file_scan_durations = file_scan_durations
         self.file_spectra = file_spectra
 
     def plot_histogram(self, X, data_type, bins=100):
@@ -151,7 +155,17 @@ class DataSource(LoggerMixin):
         plt.plot(X[:, 0], np.full(X.shape[0], -0.01), '|k')
         plt.title('Histogram for %s -- shape %s' % (data_type, str(X.shape)))
         plt.show()
-        self.logger.debug(X)
+
+    def plot_boxplot(self, X, data_type):
+        """
+        Makes a boxplot on the distribution of the item of interest
+        :param X: a numpy array
+        :return: nothing. A plot is shown.
+        """
+        plt.figure()
+        _ = plt.boxplot(X)
+        plt.title('Boxplot for %s -- shape %s' % (data_type, str(X.shape)))
+        plt.show()
 
     def plot_peak(self, peak):
         f, axarr = plt.subplots(2, sharex=True)
@@ -172,7 +186,13 @@ class DataSource(LoggerMixin):
         :return: an Nx1 numpy array of all the values requested
         """
         if data_type == SCAN_DURATION:
-            values = self.scan_durations[ms_level]
+            if filename is None: # use all scan durations
+                values = []
+                for f in self.file_scan_durations:
+                    temp = self.file_scan_durations[f][ms_level]
+                    values.extend(temp)
+            else: # use spectra for that file only
+                values = self.file_scan_durations[filename][ms_level]
         else:
             # get spectra from either one file or all files
             if filename is None: # use all spectra
@@ -206,7 +226,7 @@ class DataSource(LoggerMixin):
                     mzs = list(getattr(x, MZ) for x in spectrum_peaks)
                     intensities = list(getattr(x, INTENSITY) for x in spectrum_peaks)
                     values.extend(list(zip(mzs, intensities)))
-                else:
+                else: # MZ, INTENSITY or RT
                     attrs = list(getattr(x, data_type) for x in spectrum_peaks)
                     values.extend(attrs)
 
