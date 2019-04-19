@@ -13,11 +13,11 @@ class RoiToChemicalCreator(ChemicalCreator):
         # if filename is specified, then we use the ROIs only from that file
         # otherwise we use the ROIs from all files found in the data source
         if filename is not None:
-            rois_data = data_source.all_rois[filename]
+            rois_data = data_source.all_rois[filename]['rois']
         else: # combine the extracted ROIs for all files
             rois_data = []
             for filename in data_source.all_rois:
-                rois_data.extend(data_source.all_rois[filename])
+                rois_data.extend(data_source.all_rois[filename]['rois'])
 
         self.ms_levels = 2
         self.crp_samples = [[] for i in range(self.ms_levels)]
@@ -28,7 +28,7 @@ class RoiToChemicalCreator(ChemicalCreator):
             self.logger.warning("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
 
         # collect the regions of interest that contain no peaks
-        false_rois = [roi for roi in rois_data['rois'] if not roi.pickedPeak]
+        false_rois = [roi for roi in rois_data if not roi.pickedPeak]
         self.chromatograms = []
         self.chemicals = []
         for i in range(len(false_rois)):
@@ -36,10 +36,23 @@ class RoiToChemicalCreator(ChemicalCreator):
                 self.logger.debug('%6d/%6d' % (i, len(false_rois)))
             # if yes, then try to turn this into a chromatogram and unknown chemical
             roi = false_rois[i]
-            chrom = roi.to_chromatogram()
+
+            # raise numpy warning as exception, see https://stackoverflow.com/questions/15933741/how-do-i-catch-a-numpy-warning-like-its-an-exception-not-just-for-testing
+            chrom = None
+            with np.errstate(divide='raise'):
+                try:
+                    chrom = roi.to_chromatogram()
+                except FloatingPointError:
+                    self.logger.debug('Invalid chromatogram {}'.format(i))
+                except ZeroDivisionError:
+                    self.logger.debug('Invalid chromatogram {}'.format(i))
+
             if chrom is not None and self._valid_roi(roi, min_ms1_intensity=min_ms1_intensity):
                 chem = self.to_unknown_chemical(chrom)
-                chem.children = self._get_children(1, chem) # TODO: this should happen inside the mass spec class
+                try:
+                    chem.children = self._get_children(1, chem) # TODO: this should happen inside the mass spec class
+                except KeyError:
+                    pass
                 self.chromatograms.append(chrom)
                 self.chemicals.append(chem)
         assert len(self.chromatograms) == len(self.chemicals)
