@@ -36,7 +36,8 @@ class EmpiricalChromatogram(Chromatogram):
         # normalise arrays
         self.rts = rts - min(rts)
         self.mzs = mzs - np.mean(mzs) # may want to just set this to 0 and remove from input
-        self.intensities = chromatogramDensityNormalisation(rts, intensities)
+        self.intensities = self.raw_intensities / max(self.raw_intensities)
+        #chromatogramDensityNormalisation(rts, intensities)
 
         self.roi = roi
         self.min_rt = min(self.rts)
