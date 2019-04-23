@@ -1,6 +1,7 @@
 from collections import namedtuple
 
 import pylab as plt
+import pandas as pd
 from tqdm import tqdm
 
 from VMSfunctions.MassSpec import *
@@ -379,3 +380,82 @@ class DiaWindows(object):
                                              extra_bins).locations
         else:
             raise ValueError("Incorrect dia_design selected. Must be 'basic' or 'kaufmann'.")
+
+class DsDAController(Controller):
+    def __init__(self, mass_spec, N, isolation_window, rt_tol, min_ms1_intensity, exclusion_list=None):
+        super().__init__(mass_spec)
+        self.last_ms1_scan = None
+        self.N = N
+        self.isolation_window = isolation_window  # the isolation window (in Dalton) around a precursor ion to be fragmented
+        self.rt_tol = rt_tol  # the rt window to prevent the same precursor ion to be fragmented again
+        self.min_ms1_intensity = min_ms1_intensity # minimum ms1 intensity to fragment
+
+        mass_spec.reset()
+        default_scan = ScanParameters()
+        default_scan.set(ScanParameters.MS_LEVEL, 1)
+        default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[(0, 1e3)]])
+        mass_spec.set_repeating_scan(default_scan)
+
+        # register new event handlers under this controller
+        mass_spec.register(MassSpectrometer.MS_SCAN_ARRIVED, self.handle_scan)
+        mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_OPENING, self.handle_acquisition_open)
+        mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_CLOSING, self.handle_acquisition_closing)
+
+    def run(self, schedule_file, progress_bar=True):
+        self.schedule = pd.read_csv(schedule_file)
+        if progress_bar:
+            with tqdm(total=self.schedule["targetTime"].values[-1] - self.schedule["targetTime"].values[0], initial=0) as pbar:
+                self.mass_spec.run(self.schedule, pbar=pbar)
+        else:
+            self.mass_spec.run(self.schedule)
+
+    def handle_acquisition_open(self):
+        self.logger.info('Acquisition open')
+
+    def handle_acquisition_closing(self):
+        self.logger.info('Acquisition closing')
+
+    def _process_scan(self, scan):
+        self.logger.info('Received {}'.format(scan))
+        if scan.ms_level == 1: # we get an ms1 scan, store it for fragmentation next time
+            self.last_ms1_scan = scan  
+        elif scan.ms_level == 2:  # if we get ms2 scan, then do something with it
+            # scan.filter_intensity(self.min_ms2_intensity)
+            if scan.num_peaks > 0:
+                self._plot_scan(scan)
+
+    def _update_parameters(self, scan):
+
+        # if there's a previous ms1 scan to process
+        if self.last_ms1_scan is not None and scan.rt != self.schedule["targetTime"][0]:
+
+            rt = scan.rt
+
+            next_row = np.where(np.array(self.schedule["targetTime"]) == rt)[0].tolist()[0] + 1
+            mzs = np.array([self.schedule["targetMass"][i] for i in range(next_row,min(next_row+4,self.schedule.shape[0]),1)])
+            
+            for i in range(len(mzs)):  # define isolation window around the selected precursor ions
+
+                mz = mzs[i]
+
+                if self.mass_spec.ionisation_mode == POSITIVE:
+                    precursor_charge = +1  # assume it's all +1 if positive
+                elif self.mass_spec.ionisation_mode == NEGATIVE:
+                    precursor_charge = -1
+
+                mz_lower = mz - self.isolation_window
+                mz_upper = mz + self.isolation_window
+                isolation_windows = [[(mz_lower, mz_upper)]]
+                self.logger.debug('Isolated precursor ion {:.4f} window ({:.4f}, {:.4f})'.format(mz, \
+                                                                                                 isolation_windows[0][
+                                                                                                     0][0],
+                                                                                                 isolation_windows[0][
+                                                                                                     0][1]))
+                dda_scan_params = ScanParameters()
+                dda_scan_params.set(ScanParameters.MS_LEVEL, 2)
+                dda_scan_params.set(ScanParameters.ISOLATION_WINDOWS, isolation_windows)
+                #dda_scan_params.set(ScanParameters.PRECURSOR, precursor)
+                self.mass_spec.add_to_queue(dda_scan_params)  # push this dda scan to the mass spec queue
+
+            # set this ms1 scan as has been processed
+            self.last_ms1_scan = None
