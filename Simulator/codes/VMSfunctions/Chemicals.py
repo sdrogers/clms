@@ -230,7 +230,8 @@ class ChemicalCreator(LoggerMixin):
             if self.fixed_mz == True:
                 chrom.mzs = [0 for i in range(len(chrom.raw_mzs))]
             chem = self._get_chemical(1, formula, chrom, sampled_peaks[i])
-            chem.children = self._get_children(1, chem)
+            if ms_levels > 1:
+                chem.children = self._get_children(1, chem)
             chemicals.append(chem)
             if (i/25 == math.floor(i/25)):
                 self.logger.debug("i = {}".format(i))
