@@ -137,7 +137,8 @@ class DataSource(LoggerMixin):
                 # store the scan duration of each spectrum
                 end_time = rt
                 duration = end_time - start_time
-                file_scan_durations[fname][ms_level].append(duration)
+                item = [start_time, duration]
+                file_scan_durations[fname][ms_level].append(item)
                 start_time = end_time
 
         self.file_scan_durations = file_scan_durations
@@ -186,13 +187,13 @@ class DataSource(LoggerMixin):
         :return: an Nx1 numpy array of all the values requested
         """
         if data_type == SCAN_DURATION:
-            if filename is None: # use all scan durations
+            if filename is None: # use the scan durations from all files
                 values = []
                 for f in self.file_scan_durations:
-                    temp = self.file_scan_durations[f][ms_level]
+                    temp = self._get_filtered_scan_durations(f, ms_level, min_rt, max_rt)
                     values.extend(temp)
-            else: # use spectra for that file only
-                values = self.file_scan_durations[filename][ms_level]
+            else: # use the scan durations from that file only
+                values = self._get_filtered_scan_durations(filename, ms_level, min_rt, max_rt)
         else:
             # get spectra from either one file or all files
             if filename is None: # use all spectra
@@ -252,6 +253,15 @@ class DataSource(LoggerMixin):
         else:
             # convert into Nx1 array
             return sampled_X[:, np.newaxis]
+
+    def _get_filtered_scan_durations(self, filename, ms_level, min_rt, max_rt):
+        temp = self.file_scan_durations[filename][ms_level]
+        if min_rt is not None:
+            temp = filter(lambda item: min_rt < item[0], temp)
+        if max_rt is not None:
+            temp = filter(lambda item: item[0] < max_rt, temp)
+        values = list(temp.map(lambda item: item[1]))
+        return values
 
     def extract_roi(self, roi_file, min_rt=None, max_rt=None, filename=None):
         self.roi_df = pd.read_csv(roi_file)
