@@ -260,7 +260,7 @@ class DataSource(LoggerMixin):
             temp = filter(lambda item: min_rt < item[0], temp)
         if max_rt is not None:
             temp = filter(lambda item: item[0] < max_rt, temp)
-        values = list(temp.map(lambda item: item[1]))
+        values = list(map(lambda item: item[1], temp))
         return values
 
     def extract_roi(self, roi_file, min_rt=None, max_rt=None, filename=None):
