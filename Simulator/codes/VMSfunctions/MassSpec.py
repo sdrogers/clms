@@ -4,6 +4,7 @@ from events import Events
 
 from VMSfunctions.Chromatograms import *
 from VMSfunctions.Common import *
+import pandas as pd
 
 
 # controller sends scan request
@@ -301,6 +302,52 @@ class IndependentMassSpectrometer(MassSpectrometer):
             if window[0] < self._get_mz(chemical, query_rt, which_isotope, which_adduct) <= window[1]:
                 return True
         return False
+
+class DsDAMassSpec(IndependentMassSpectrometer):
+    
+    def run(self, schedule, pbar=None):
+        self.schedule = schedule
+        self.time = schedule["targetTime"][0]
+        initial_time = schedule["targetTime"][0]
+        self.fire_event(MassSpectrometer.ACQUISITION_STREAM_OPENING)
+        try:
+            for time_index in range(len(self.schedule["targetTime"])):
+                initial_time = self.time
+                if len(self.queue) == 0:
+                    param = self.repeating_scan_parameters
+                else:
+                    # otherwise pop the parameter for the next scan from the queue
+                    param = self.queue.pop(0)
+                scan = self.get_next_scan(param, time_index)
+                # logger.debug('time %f scan %s' % (self.time, scan))
+
+                # if MS2 and above, and the controller tells us which precursor ion the scan is coming from, store it
+                precursor = param.get(ScanParameters.PRECURSOR)
+                if scan.ms_level >= 2 and precursor is not None and scan.num_peaks > 0:
+                    self.precursor_information[precursor].append(scan)
+
+                # print a progress bar if provided
+                if pbar is not None and self.time is not None:
+                    elapsed = self.time - initial_time
+                    pbar.update(elapsed)
+                    
+        finally:
+            self.fire_event(MassSpectrometer.ACQUISITION_STREAM_CLOSING)
+            if pbar is not None:
+                pbar.close()
+
+    def get_next_scan(self, param, time_index):
+        if param is not None:
+            scan = self._get_scan(self.time, param)
+            self.fire_event(self.MS_SCAN_ARRIVED, scan)
+            self.idx += 1
+            if time_index + 1 < len(self.schedule["targetTime"]):
+                self.time = self.schedule["targetTime"][time_index + 1]
+            else:
+                self.time = None
+            return scan
+        else:
+            return None
 
 # class ThermoFusionMassSpectrometer:
 
