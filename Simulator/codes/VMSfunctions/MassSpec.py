@@ -70,6 +70,18 @@ class ScanParameters(object):
         return 'ScanParameters %s' % (self.params)
 
 
+class FragmentationEvent(object): # for benchmarking purpose
+    def __init__(self, chem, query_rt, ms_level, peaks, scan_id):
+        self.chem = chem
+        self.query_rt = query_rt
+        self.ms_level = ms_level
+        self.peaks = peaks
+        self.scan_id = scan_id
+
+    def __repr__(self):
+        return 'MS%d FragmentationEvent for %s at %f' % (self.ms_level, self.chem, self.query_rt)
+
+
 class MassSpectrometer(LoggerMixin):
     MS_SCAN_ARRIVED = 'MsScanArrived'
     ACQUISITION_STREAM_OPENING = 'AcquisitionStreamOpening'
@@ -125,7 +137,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
         self.repeating_scan_parameters = None
         self.precursor_information = defaultdict(list) # key: Precursor object, value: ms2 scans
         self.density = density # a PeakDensityEstimator object
-        self.chemicals_to_peaks = defaultdict(list) # which chemicals produce which peaks
+        self.fragmentation_events = [] # which chemicals produce which peaks
 
         try: # for EmpiricalChromatogram, we have the min_rt and max_rt
             self.chrom_min_rts = np.array([chem.chrom.min_rt for chem in self.chemicals])
@@ -200,6 +212,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
         scan_intensities = []  # all the intensity values in this scan
         ms_level = param.get(ScanParameters.MS_LEVEL)
         isolation_windows = param.get(ScanParameters.ISOLATION_WINDOWS)
+        scan_id = self.idx
 
         # for all chemicals that come out from the column coupled to the mass spec
         for i in self._get_chem_indices(scan_time):
@@ -210,21 +223,24 @@ class IndependentMassSpectrometer(MassSpectrometer):
             if mzs is not None:
                 chem_mzs = []
                 chem_intensities = []
+                peaks = []
                 for peak_mz, peak_intensity in mzs:
                     if peak_intensity > 0:
                         chem_mzs.append(peak_mz)
                         chem_intensities.append(peak_intensity)
-
-                        # track which peaks produced by which chemical for benchmarking purpose
                         p = Peak(peak_mz, scan_time, peak_intensity, ms_level)
-                        self.chemicals_to_peaks[chemical].append(p)
+                        peaks.append(p)
+
+                    # for benchmarking purpose
+                    frag = FragmentationEvent(chemical, scan_time, ms_level, peaks, scan_id)
+                    self.fragmentation_events.append(frag)
 
                 scan_mzs.extend(chem_mzs)
                 scan_intensities.extend(chem_intensities)
 
         scan_mzs = np.array(scan_mzs)
         scan_intensities = np.array(scan_intensities)
-        return Scan(self.idx, scan_mzs, scan_intensities, ms_level, scan_time,
+        return Scan(scan_id, scan_mzs, scan_intensities, ms_level, scan_time,
                     density=self.density, isolation_windows=isolation_windows)
 
     def _get_chem_indices(self, query_rt):
