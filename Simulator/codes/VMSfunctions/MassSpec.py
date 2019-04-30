@@ -220,10 +220,10 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
             # mzs is a list of (mz, intensity) for the different adduct/isotopes combinations of a chemical            
             mzs = self._get_all_mz_peaks(chemical, scan_time, ms_level, isolation_windows)
+            peaks = []
             if mzs is not None:
                 chem_mzs = []
                 chem_intensities = []
-                peaks = []
                 for peak_mz, peak_intensity in mzs:
                     if peak_intensity > 0:
                         chem_mzs.append(peak_mz)
@@ -231,12 +231,13 @@ class IndependentMassSpectrometer(MassSpectrometer):
                         p = Peak(peak_mz, scan_time, peak_intensity, ms_level)
                         peaks.append(p)
 
-                    # for benchmarking purpose
-                    frag = FragmentationEvent(chemical, scan_time, ms_level, peaks, scan_id)
-                    self.fragmentation_events.append(frag)
-
                 scan_mzs.extend(chem_mzs)
                 scan_intensities.extend(chem_intensities)
+
+            # for benchmarking purpose
+            if len(peaks) > 0:
+                frag = FragmentationEvent(chemical, scan_time, ms_level, peaks, scan_id)
+                self.fragmentation_events.append(frag)
 
         scan_mzs = np.array(scan_mzs)
         scan_intensities = np.array(scan_intensities)
@@ -262,6 +263,17 @@ class IndependentMassSpectrometer(MassSpectrometer):
             return mz_peaks
 
     def _get_mz_peaks(self, chemical, query_rt, ms_level, isolation_windows, which_isotope, which_adduct):
+        # Vinny says:
+        # so the first "if" return the ms1 peaks if it is an ms1 scan
+        # the first "elif" stops it returning any ms2+ fragments when its not monoisotopic
+        # the second "elif" returns ms2 fragments if ms2 scan, ms3 fragments if ms3 scan
+        # etc etc
+        # the "else" checks isolation window matches
+        # for example. if we wants to do an ms2 scan on a chemical. we would first have ms_level=2 and the chemicals
+        # ms_level =1. So we would go to the "else". We then check the ms1 window matched. It then would loop through
+        # the children who have ms_level = 2. So we then go to second elif and return the mz and intensity of each ms2 fragment
+        # so in the last "else". if we check the isolation window match, then we query the children of that chemical
+        # (which will have a different ms2 level). else we will return no fragments because the window isnt right
         mz_peaks = []
         if ms_level == 1 and chemical.ms_level == 1: # fragment ms1 peaks
             if not (which_isotope > 0 and which_adduct > 0):
