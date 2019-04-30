@@ -263,31 +263,29 @@ class IndependentMassSpectrometer(MassSpectrometer):
             return mz_peaks
 
     def _get_mz_peaks(self, chemical, query_rt, ms_level, isolation_windows, which_isotope, which_adduct):
-        # Vinny says:
-        # so the first "if" return the ms1 peaks if it is an ms1 scan
-        # the first "elif" stops it returning any ms2+ fragments when its not monoisotopic
-        # the second "elif" returns ms2 fragments if ms2 scan, ms3 fragments if ms3 scan
-        # etc etc
-        # the "else" checks isolation window matches
-        # for example. if we wants to do an ms2 scan on a chemical. we would first have ms_level=2 and the chemicals
+        # EXAMPLE OF USE OF DEFINITION: if we wants to do an ms2 scan on a chemical. we would first have ms_level=2 and the chemicals
         # ms_level =1. So we would go to the "else". We then check the ms1 window matched. It then would loop through
         # the children who have ms_level = 2. So we then go to second elif and return the mz and intensity of each ms2 fragment
-        # so in the last "else". if we check the isolation window match, then we query the children of that chemical
-        # (which will have a different ms2 level). else we will return no fragments because the window isnt right
         mz_peaks = []
         if ms_level == 1 and chemical.ms_level == 1: # fragment ms1 peaks
+            # returns ms1 peaks if chemical is has ms_level = 1 and scan is an ms1 scan
             if not (which_isotope > 0 and which_adduct > 0):
+                # rechecks isolations window if not monoisotopic and "M + H" adduct
                 if self._isolation_match(chemical, query_rt, isolation_windows[0], which_isotope, which_adduct):
                     intensity = self._get_intensity(chemical, query_rt, which_isotope, which_adduct)
                     mz = self._get_mz(chemical, query_rt, which_isotope, which_adduct)
                     mz_peaks.extend([(mz, intensity)])
         elif ms_level > 1 and which_isotope > 0:
             pass # TODO: we need to deal with msN fragmentation of non-monoisotopic peaks?
-        elif ms_level == chemical.ms_level: # fragment MSn peaks
+            # does not return any ms2+ fragments if not monoisotopic
+        elif ms_level == chemical.ms_level:
+            # returns ms2 fragments if chemical and scan are both ms2, 
+            # returns ms3 fragments if chemical and scan are both ms3, etc, etc
             intensity = self._get_intensity(chemical, query_rt, which_isotope, which_adduct)
             mz = self._get_mz(chemical, query_rt, which_isotope, which_adduct)
             return [(mz, intensity)]
         else:
+            # check isolation window for ms2+ scans, queries children if isolation windows ok
             if self._isolation_match(chemical, query_rt, isolation_windows[chemical.ms_level - 1], which_isotope,
                                      which_adduct) and chemical.children is not None:
                 for i in range(len(chemical.children)):
