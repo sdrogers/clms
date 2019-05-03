@@ -57,7 +57,7 @@ class SimpleMs1Controller(Controller):
         super().__init__(mass_spec)
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
-        default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[(0, 1e3)]])
+        default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[DEFAULT_MS1_SCAN_WINDOW]])
 
         mass_spec.reset()
         mass_spec.set_repeating_scan(default_scan)
@@ -107,7 +107,7 @@ class TopNController(Controller):
         mass_spec.reset()
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
-        default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[(0, 1e3)]])
+        default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[DEFAULT_MS1_SCAN_WINDOW]])
         mass_spec.set_repeating_scan(default_scan)
 
         # register new event handlers under this controller
@@ -230,7 +230,7 @@ class TreeController(Controller):
         mass_spec.reset()
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
-        default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[(0, 1e3)]])
+        default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[DEFAULT_MS1_SCAN_WINDOW]])
         mass_spec.set_repeating_scan(default_scan)
 
         mass_spec.register(MassSpectrometer.MS_SCAN_ARRIVED, self.handle_scan)
@@ -271,7 +271,7 @@ class TreeController(Controller):
 
             # then get the last ms1 scan, select bin walls and create scan locations
             mzs = self.last_ms1_scan.mzs
-            default_range = [(0, 1e3)]  # TODO: this should maybe come from somewhere else?
+            default_range = [DEFAULT_MS1_SCAN_WINDOW]  # TODO: this should maybe come from somewhere else?
             locations = DiaWindows(mzs, default_range, self.dia_design, self.window_type, self.kaufmann_design,
                                    self.extra_bins, self.num_windows).locations
             self.logger.debug('Window locations {}'.format(locations))
@@ -393,7 +393,7 @@ class DsDAController(Controller):
         mass_spec.reset()
         default_scan = ScanParameters()
         default_scan.set(ScanParameters.MS_LEVEL, 1)
-        default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[(0, 1e3)]])
+        default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[DEFAULT_MS1_SCAN_WINDOW]])
         mass_spec.set_repeating_scan(default_scan)
 
         # register new event handlers under this controller
