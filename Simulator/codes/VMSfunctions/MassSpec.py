@@ -140,11 +140,12 @@ class IndependentMassSpectrometer(MassSpectrometer):
         self.fragmentation_events = [] # which chemicals produce which peaks
 
         try: # for EmpiricalChromatogram, we have the min_rt and max_rt
-            self.chrom_min_rts = np.array([chem.chrom.min_rt for chem in self.chemicals])
-            self.chrom_max_rts = np.array([chem.chrom.max_rt for chem in self.chemicals])
+            chem_rts = np.array([chem.rt for chem in self.chemicals])
+            self.chrom_min_rts = np.array([chem.chromatogram.min_rt for chem in self.chemicals]) + chem_rts
+            self.chrom_max_rts = np.array([chem.chromatogram.max_rt for chem in self.chemicals]) + chem_rts
         except AttributeError: # TODO: ask vinny how to set min_rt and max_rt for functional chromatograms
-            self.chrom_min_rts = np.array([chem.rt-np.inf for chem in self.chemicals])
-            self.chrom_max_rts = np.array([chem.rt+np.inf for chem in self.chemicals])
+            self.chrom_min_rts = np.array([-np.inf for chem in self.chemicals])
+            self.chrom_max_rts = np.array([np.inf for chem in self.chemicals])
 
     def run(self, min_time, max_time, pbar=None):
         self.time = min_time
@@ -215,8 +216,8 @@ class IndependentMassSpectrometer(MassSpectrometer):
         scan_id = self.idx
 
         # for all chemicals that come out from the column coupled to the mass spec
-        # for i in self._get_chem_indices(scan_time): # TODO: not correct!!!
-        for i in range(len(self.chemicals)):
+        idx = self._get_chem_indices(scan_time)
+        for i in idx:
             chemical = self.chemicals[i]
 
             # mzs is a list of (mz, intensity) for the different adduct/isotopes combinations of a chemical            
@@ -245,12 +246,11 @@ class IndependentMassSpectrometer(MassSpectrometer):
         return Scan(scan_id, scan_mzs, scan_intensities, ms_level, scan_time,
                     density=self.density, isolation_windows=isolation_windows)
 
-    # not correct, do not use!!
-    # def _get_chem_indices(self, query_rt):
-    #     rtmin_check = self.chrom_min_rts <= query_rt
-    #     rtmax_check = query_rt <= self.chrom_max_rts
-    #     idx = np.nonzero(rtmin_check & rtmax_check)[0]
-    #     return idx
+    def _get_chem_indices(self, query_rt):
+        rtmin_check = self.chrom_min_rts <= query_rt
+        rtmax_check = query_rt <= self.chrom_max_rts
+        idx = np.nonzero(rtmin_check & rtmax_check)[0]
+        return idx
 
     def _get_all_mz_peaks(self, chemical, query_rt, ms_level, isolation_windows):
         if not self._rt_match(chemical, query_rt):
