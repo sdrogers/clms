@@ -215,7 +215,8 @@ class IndependentMassSpectrometer(MassSpectrometer):
         scan_id = self.idx
 
         # for all chemicals that come out from the column coupled to the mass spec
-        for i in self._get_chem_indices(scan_time):
+        # for i in self._get_chem_indices(scan_time): # TODO: not correct!!!
+        for i in range(len(self.chemicals)):
             chemical = self.chemicals[i]
 
             # mzs is a list of (mz, intensity) for the different adduct/isotopes combinations of a chemical            
@@ -244,11 +245,12 @@ class IndependentMassSpectrometer(MassSpectrometer):
         return Scan(scan_id, scan_mzs, scan_intensities, ms_level, scan_time,
                     density=self.density, isolation_windows=isolation_windows)
 
-    def _get_chem_indices(self, query_rt):
-        rtmin_check = self.chrom_min_rts <= query_rt
-        rtmax_check = query_rt <= self.chrom_max_rts
-        idx = np.nonzero(rtmin_check & rtmax_check)[0]
-        return idx
+    # not correct, do not use!!
+    # def _get_chem_indices(self, query_rt):
+    #     rtmin_check = self.chrom_min_rts <= query_rt
+    #     rtmax_check = query_rt <= self.chrom_max_rts
+    #     idx = np.nonzero(rtmin_check & rtmax_check)[0]
+    #     return idx
 
     def _get_all_mz_peaks(self, chemical, query_rt, ms_level, isolation_windows):
         if not self._rt_match(chemical, query_rt):
