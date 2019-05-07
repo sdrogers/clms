@@ -28,13 +28,13 @@ max_rt = 21*60
 N = 10
 rt_tol = 15
 
-# isolation_window = 0.5   # the isolation window in Dalton around a selected precursor ion
+# isolation_window = 1   # the isolation window in Dalton around a selected precursor ion
 # ionisation_mode = POSITIVE
-# data = dataset[0:100]
+# data = noisy_dataset
 # density = ps.density_estimator
-# min_ms1_intensity = 2.5E5 # minimum ms1 intensity to fragment
-# min_rt = 200
-# max_rt = 600
+# min_ms1_intensity = 1.75E5 # minimum ms1 intensity to fragment
+# min_rt = 3*60
+# max_rt = 21*60
 # N = 10
 # rt_tol = 15
 
