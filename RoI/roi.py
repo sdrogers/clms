@@ -60,8 +60,8 @@ class Roi(object):
 # If it falls into nothing, return None
 # mz_tol is the window above and below the 
 # mean_mz of the RoI. E.g. if mz_tol = 1 Da, then it looks
-# plus and minus 1Da
-def match(mz,roi_list,mz_tol):
+# plus and minus 1Da
+def match(mz,roi_list,mz_tol,mz_units = 'Da'):
     if len(roi_list) == 0:
         return None
     pos = bisect.bisect_right(roi_list,mz)
@@ -70,8 +70,12 @@ def match(mz,roi_list,mz_tol):
     if pos == 0:
         return None
     
-    dist_left = mz.get_mean_mz() - roi_list[pos-1].get_mean_mz()
-    dist_right = roi_list[pos].get_mean_mz() - mz.get_mean_mz()
+    if mz_units == 'Da':
+        dist_left = mz.get_mean_mz() - roi_list[pos-1].get_mean_mz()
+        dist_right = roi_list[pos].get_mean_mz() - mz.get_mean_mz()
+    else: # ppm
+        dist_left = 1e6*(mz.get_mean_mz() - roi_list[pos-1].get_mean_mz())/mz.get_mean_mz()
+        dist_right = 1e6*(roi_list[pos].get_mean_mz() - mz.get_mean_mz())/mz.get_mean_mz()
     
     if dist_left < mz_tol and dist_right > mz_tol:
         return roi_list[pos-1]
@@ -131,10 +135,16 @@ def cosine_score(u,v):
 
 
 # Make the RoI from an input file
-def make_roi(input_file,mz_tol = 0.001,min_length = 10,min_intensity = 50000,start_rt = 0,stop_rt = 10000000):
+# mz_units = Da for Daltons
+# mz_units = ppm for ppm
+def make_roi(input_file,mz_tol = 0.001,mz_units = 'Da',min_length = 10,min_intensity = 50000,start_rt = 0,stop_rt = 10000000):
 
     # input_file = 'Beer_multibeers_1_fullscan1.mzML'
     
+
+    if not mz_units == 'Da' and not mz_units == 'ppm':
+        print("Unknown mz units, use Da or ppm")
+        return None,None
 
     run = pymzml.run.Reader(input_file, MS1_Precision=5e-6,
                                         extraAccessions=[('MS:1000016', ['value', 'unitName'])],
@@ -163,7 +173,7 @@ def make_roi(input_file,mz_tol = 0.001,min_length = 10,min_intensity = 50000,sta
             not_grew = set(live_roi)
             for mz,intensity in spectrum.peaks:
                 if intensity >= min_intensity:
-                    match_roi = match(Roi(mz,0,0),live_roi,mz_tol)
+                    match_roi = match(Roi(mz,0,0),live_roi,mz_tol,mz_units=mz_units)
                     if match_roi:
                         match_roi.add(mz,current_ms1_scan_rt,intensity)
                         if match_roi in not_grew:
