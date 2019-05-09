@@ -93,11 +93,12 @@ Precursor = namedtuple('Precursor', 'precursor_mz precursor_intensity precursor_
 
 
 class TopNController(Controller):
-    def __init__(self, mass_spec, N, isolation_window, rt_tol, min_ms1_intensity, exclusion_list=None):
+    def __init__(self, mass_spec, N, isolation_window, mz_tol, rt_tol, min_ms1_intensity, exclusion_list=None):
         super().__init__(mass_spec)
         self.last_ms1_scan = None
         self.N = N
-        self.isolation_window = isolation_window  # the isolation window (in Dalton) around a precursor ion to be fragmented
+        self.isolation_window = isolation_window  # the isolation window (in Dalton) to select a precursor ion
+        self.mz_tol = mz_tol # the m/z window (ppm) to prevent the same precursor ion to be fragmented again
         self.rt_tol = rt_tol  # the rt window to prevent the same precursor ion to be fragmented again
         self.min_ms1_intensity = min_ms1_intensity # minimum ms1 intensity to fragment
         if exclusion_list is None:
@@ -146,35 +147,36 @@ class TopNController(Controller):
         # if there's a previous ms1 scan to process
         if self.last_ms1_scan is not None:
 
+            mzs = self.last_ms1_scan.mzs
+            intensities = self.last_ms1_scan.intensities
             rt = self.last_ms1_scan.rt
 
-            # then get the last ms1 scan and select its top-N precursor ions
-            intensities = self.last_ms1_scan.intensities
-            largest_indices = intensities.argsort()[-self.N:][::-1]
-            largest_mzs = self.last_ms1_scan.mzs[largest_indices]
-            largest_intensities = self.last_ms1_scan.intensities[largest_indices]
+            # loop over points in decreasing intensity
+            fragmented_count = 0
+            idx = np.argsort(intensities)[::-1]
+            for i in idx:
+                mz = mzs[i]
+                intensity = intensities[i]
 
-            for i in range(len(largest_mzs)):  # define isolation window around the selected precursor ions
+                # stopping criteria is after we've fragmented N ions or we found ion < min_intensity
+                if fragmented_count > self.N or intensity < self.min_ms1_intensity:
+                    self.logger.debug('Top-%d ions fragmented at %d' % (self.N, fragmented_count))
+                    break
 
-                mz = largest_mzs[i]
-                intensity = largest_intensities[i]
+                if intensity < self.min_ms1_intensity:
+                    self.logger.debug('Minimum intensity threshold %f reached at %f' % (self.min_ms1_intensity, intensity))
+                    break
+
+                # skip ion in the dynamic exclusion list
                 if self._exclude(mz, rt, self.exclusion_list):
                     continue
 
-                if self.mass_spec.ionisation_mode == POSITIVE:
-                    precursor_charge = +1  # assume it's all +1 if positive
-                elif self.mass_spec.ionisation_mode == NEGATIVE:
-                    precursor_charge = -1
-
+                # create precursor object
+                # assume it's all singly charged
+                precursor_charge = +1 if (self.mass_spec.ionisation_mode == POSITIVE) else -1
                 precursor = Precursor(precursor_mz=mz, precursor_intensity=intensity,
                                       precursor_charge=precursor_charge, precursor_scan_id=self.last_ms1_scan.scan_id)
-                if not self._valid_precursor(precursor):
-                    self.logger.debug('Not fragmenting %s because it is below the minimum intensity threshold of %f' %
-                                      (precursor, self.min_ms1_intensity))
-                    continue
 
-                # mz_lower = mz * (1 - self.mz_tol / 1e6)
-                # mz_upper = mz * (1 + self.mz_tol / 1e6)
                 mz_lower = mz - self.isolation_window
                 mz_upper = mz + self.isolation_window
                 isolation_windows = [[(mz_lower, mz_upper)]]
@@ -183,13 +185,19 @@ class TopNController(Controller):
                                                                                                      0][0],
                                                                                                  isolation_windows[0][
                                                                                                      0][1]))
+
+                # send a new scan parameter to the mass spec
                 dda_scan_params = ScanParameters()
                 dda_scan_params.set(ScanParameters.MS_LEVEL, 2)
                 dda_scan_params.set(ScanParameters.ISOLATION_WINDOWS, isolation_windows)
                 dda_scan_params.set(ScanParameters.PRECURSOR, precursor)
                 self.mass_spec.add_to_queue(dda_scan_params)  # push this dda scan to the mass spec queue
+                fragmented_count += 1
 
-                # dynamic exclusion: prevent the same precursor ion being fragmented multiple times in the same rt window
+                # update dynamic exclusion list to prevent the same precursor ion being fragmented multiple times in
+                # the same mz and rt window
+                mz_lower = mz * (1 - self.mz_tol / 1e6)
+                mz_upper = mz * (1 + self.mz_tol / 1e6)
                 rt_lower = rt - self.rt_tol if rt - self.rt_tol > 0 else 0
                 rt_upper = rt + self.rt_tol
                 x = ExclusionItem(from_mz=mz_lower, to_mz=mz_upper, from_rt=rt_lower, to_rt=rt_upper)
@@ -201,7 +209,7 @@ class TopNController(Controller):
             # set this ms1 scan as has been processed
             self.last_ms1_scan = None
 
-            # remove expired items from exclusion list
+            # remove expired items from dynamic exclusion list
             self.exclusion_list = list(filter(lambda x: x.to_rt > rt, self.exclusion_list))
 
     def _exclude(self, mz, rt, exclusion_list):  # TODO: make this faster?
@@ -212,9 +220,6 @@ class TopNController(Controller):
                 self.logger.debug('Excluded precursor ion mz {:.4f} rt {:.2f}'.format(mz, rt))
                 return True
         return False
-
-    def _valid_precursor(self, precursor):
-        return precursor.precursor_intensity > self.min_ms1_intensity
 
 
 class TreeController(Controller):
