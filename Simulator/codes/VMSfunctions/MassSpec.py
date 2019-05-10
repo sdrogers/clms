@@ -139,13 +139,10 @@ class IndependentMassSpectrometer(MassSpectrometer):
         self.density = density # a PeakDensityEstimator object
         self.fragmentation_events = [] # which chemicals produce which peaks
 
-        try: # for EmpiricalChromatogram, we have the min_rt and max_rt
-            chem_rts = np.array([chem.rt for chem in self.chemicals])
-            self.chrom_min_rts = np.array([chem.chromatogram.min_rt for chem in self.chemicals]) + chem_rts
-            self.chrom_max_rts = np.array([chem.chromatogram.max_rt for chem in self.chemicals]) + chem_rts
-        except AttributeError: # TODO: ask vinny how to set min_rt and max_rt for functional chromatograms
-            self.chrom_min_rts = np.array([-np.inf for chem in self.chemicals])
-            self.chrom_max_rts = np.array([np.inf for chem in self.chemicals])
+        chem_rts = np.array([chem.rt for chem in self.chemicals])
+        self.chrom_min_rts = np.array([chem.chromatogram.min_rt for chem in self.chemicals]) + chem_rts
+        self.chrom_max_rts = np.array([chem.chromatogram.max_rt for chem in self.chemicals]) + chem_rts
+
 
     def run(self, min_time, max_time, pbar=None):
         self.time = min_time

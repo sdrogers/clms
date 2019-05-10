@@ -111,6 +111,8 @@ class FunctionalChromatogram(Chromatogram):
             self.distrib = scipy.stats.uniform(parameters[0], parameters[1])
         else:
             raise NotImplementedError("distribution not implemented")
+        self.min_rt = 0
+        self.max_rt = self.distrib.ppf(1 - (self.cutoff / 2)) - self.distrib.ppf(self.cutoff / 2)
 
     def get_relative_intensity(self, query_rt):
         if self._rt_match(query_rt) == False:
