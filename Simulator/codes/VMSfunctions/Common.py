@@ -15,6 +15,7 @@ N_PEAKS = 'n_peaks'
 SCAN_DURATION = 'scan_duration'
 POSITIVE = 'positive'
 NEGATIVE = 'negative'
+DEFAULT_MS1_SCAN_WINDOW = (0, 1e3)
 
 PROTON_MASS = 1.00727645199076
 

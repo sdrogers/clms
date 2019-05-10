@@ -26,9 +26,23 @@ min_ms1_intensity = 2.5E5 # minimum ms1 intensity to fragment
 min_rt = 3*60
 max_rt = 21*60
 N = 10
+mz_tol = 10
 rt_tol = 15
 
+# isolation_window = 1   # the isolation window in Dalton around a selected precursor ion
+# ionisation_mode = POSITIVE
+# data = noisy_dataset
+# density = ps.density_estimator
+# min_ms1_intensity = 1.75E5 # minimum ms1 intensity to fragment
+# min_rt = 3*60
+# max_rt = 21*60
+# N = 10
+# mz_tol = 10
+# rt_tol = 15
+
+set_log_level_warning()
 mass_spec = IndependentMassSpectrometer(ionisation_mode, data, density=density)
-controller = TopNController(mass_spec, N, isolation_window,
+controller = TopNController(mass_spec, N, isolation_window, mz_tol,
                             rt_tol, min_ms1_intensity)
 controller.run(min_rt, max_rt, True)
+controller.write_mzML('my_analysis', '../models/test/mzML/out.mzML')

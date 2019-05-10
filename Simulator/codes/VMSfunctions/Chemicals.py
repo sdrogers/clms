@@ -255,6 +255,9 @@ class ChemicalCreator(LoggerMixin):
         for i in range(len(chromatogram_creator.chromatograms)):
             chem = chromatogram_creator.chemicals[i]
             if self._valid_ms1_chem(chem):
+                # In the MassSpec, we assume that chemical starts eluting from chem.rt + chem.chromatogram.rts (normalised to start from 0)
+                # So here, we have to set set chemical rt to start from the minimum of chromatogram raw rts, so it elutes correct.
+                chem.rt = min(chem.chromatogram.raw_rts)
                 chem.children = self._get_children(1, chem)
                 chemicals.append(chem)
                 if i % 2500 == 0:

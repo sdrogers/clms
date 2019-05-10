@@ -76,9 +76,14 @@ class RoiToChemicalCreator(ChemicalCreator):
         return True
 
     def to_unknown_chemical(self, chrom):
-        idx = np.argmax(chrom.raw_intensities)
+        idx = np.argmax(chrom.raw_intensities) # find intensity apex
         mz = chrom.raw_mzs[idx]
-        rt = chrom.raw_rts[idx]
+
+        # In the MassSpec, we assume that chemical starts eluting from chem.rt + chem.chromatogram.rts (normalised to start from 0)
+        # So here, we have to set set chemical rt to start from the minimum of chromatogram raw rts, so it elutes correct.
+        # rt = chrom.raw_rts[idx]
+        rt = min(chrom.raw_rts)
+
         max_intensity = chrom.raw_intensities[idx]
         chem = UnknownChemical(mz, rt, max_intensity, chrom, None)
         return chem
