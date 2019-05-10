@@ -3,6 +3,7 @@ from collections import namedtuple
 import pylab as plt
 import pandas as pd
 from tqdm import tqdm
+import sys
 
 from VMSfunctions.MassSpec import *
 from VMSfunctions.MzmlWriter import *
@@ -296,36 +297,35 @@ class KaufmannWindows(object):
         if kaufmann_design == "nested":
             n_locations_internal = 4
             for i in range(0, 8):
-                self.locations.append([(bin_walls[(0 + i * 8)], bin_walls[(8 + i * 8)])])
+                self.locations.append([[(bin_walls[(0 + i * 8)], bin_walls[(8 + i * 8)])]])
         elif kaufmann_design == "tree":
             n_locations_internal = 3
-            self.locations.append([(bin_walls[0], bin_walls[32])])
-            self.locations.append([(bin_walls[32], bin_walls[64])])
-            self.locations.append([(bin_walls[16], bin_walls[48])])
-            self.locations.append([(bin_walls[8], bin_walls[24]), (bin_walls[40], bin_walls[56])])
+            self.locations.append([[(bin_walls[0], bin_walls[32])]])
+            self.locations.append([[(bin_walls[32], bin_walls[64])]])
+            self.locations.append([[(bin_walls[16], bin_walls[48])]])
+            self.locations.append([[(bin_walls[8], bin_walls[24]), (bin_walls[40], bin_walls[56])]])
         else:
             raise ValueError("not a valid design")
-        locations_internal = [[] for i in range(n_locations_internal + extra_bins)]
+        locations_internal = [[[]] for i in range(n_locations_internal + extra_bins)]
         for i in range(0, 4):
-            locations_internal[0].append((bin_walls[(4 + i * 16)], bin_walls[(12 + i * 16)]))
-            locations_internal[1].append((bin_walls[(2 + i * 16)], bin_walls[(6 + i * 16)]))
-            locations_internal[1].append((bin_walls[(10 + i * 16)], bin_walls[(14 + i * 16)]))
-            locations_internal[2].append((bin_walls[(1 + i * 16)], bin_walls[(3 + i * 16)]))
-            locations_internal[2].append((bin_walls[(9 + i * 16)], bin_walls[(11 + i * 16)]))
+            locations_internal[0][0].append((bin_walls[(4 + i * 16)], bin_walls[(12 + i * 16)]))
+            locations_internal[1][0].append((bin_walls[(2 + i * 16)], bin_walls[(6 + i * 16)]))
+            locations_internal[1][0].append((bin_walls[(10 + i * 16)], bin_walls[(14 + i * 16)]))
+            locations_internal[2][0].append((bin_walls[(1 + i * 16)], bin_walls[(3 + i * 16)]))
+            locations_internal[2][0].append((bin_walls[(9 + i * 16)], bin_walls[(11 + i * 16)]))
             if kaufmann_design == "nested":
-                locations_internal[3].append((bin_walls[(5 + i * 16)], bin_walls[(7 + i * 16)]))
-                locations_internal[3].append((bin_walls[(13 + i * 16)], bin_walls[(15 + i * 16)]))
+                locations_internal[3][0].append((bin_walls[(5 + i * 16)], bin_walls[(7 + i * 16)]))
+                locations_internal[3][0].append((bin_walls[(13 + i * 16)], bin_walls[(15 + i * 16)]))
             else:
-                locations_internal[2].append((bin_walls[(5 + i * 16)], bin_walls[(7 + i * 16)]))
-                locations_internal[2].append((bin_walls[(13 + i * 16)], bin_walls[(15 + i * 16)]))
-        if extra_bins > 0:
+                locations_internal[2][0].append((bin_walls[(5 + i * 16)], bin_walls[(7 + i * 16)]))
+                locations_internal[2][0].append((bin_walls[(13 + i * 16)], bin_walls[(15 + i * 16)]))
+        if extra_bins > 0: # TODO: fix this
             for j in range(extra_bins):
                 for i in range(64 * (2 ** j)):
-                    locations_internal[n_locations_internal + j].append((bin_walls_extra[int(
+                    locations_internal[n_locations_internal + j][0].append((bin_walls_extra[int(
                         0 + i * ((2 ** extra_bins) / (2 ** j)))], bin_walls_extra[int(
                         ((2 ** extra_bins) / (2 ** j)) / 2 + i * ((2 ** extra_bins) / (2 ** j)))]))
         self.locations.extend(locations_internal)
-
 
 class DiaWindows(object):
     """
@@ -350,14 +350,14 @@ class DiaWindows(object):
             internal_bin_walls[-1] = internal_bin_walls[-1] + range_slack * ms1_range_difference
             internal_bin_walls_extra = None
             if extra_bins > 0:
-                internal_bin_walls_extra = [min(self.ms1_values)]
+                internal_bin_walls_extra = [ms1_range[0][0]]
                 for window_index in range(0, num_windows * (2 ** extra_bins)):
                     internal_bin_walls_extra.append(ms1_range[0][0] + (
                             (window_index + 1) / (num_windows * (2 ** extra_bins))) * ms1_range_difference)
                 internal_bin_walls_extra[0] = internal_bin_walls_extra[0] - range_slack * ms1_range_difference
                 internal_bin_walls_extra[-1] = internal_bin_walls_extra[-1] + range_slack * ms1_range_difference
         elif window_type == "percentile":
-            internal_bin_walls = np.percentile(self.ms1_values,
+            internal_bin_walls = np.percentile(ms1_mzs,
                                                np.arange(0, 100 + 100 / num_windows, 100 / num_windows)).tolist()
             internal_bin_walls[0] = internal_bin_walls[0] - range_slack * ms1_range_difference
             internal_bin_walls[-1] = internal_bin_walls[-1] + range_slack * ms1_range_difference

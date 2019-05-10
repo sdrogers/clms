@@ -321,7 +321,7 @@ class ChemicalCreator(LoggerMixin):
             return int(self.n_ms1_peaks)
             # TODO: give the option to sample this from a density
         elif ms_level == 2:
-            return int(self.peak_sampler.density_estimator.n_peaks(2, 1))  # not sure this will work
+            return int(self.peak_sampler.density_estimator.n_peaks(2, 1))
         else:
             return int(math.floor(self.peak_sampler.density_estimator.n_peaks(2, 1) / (5**(ms_level-2))))
 
