@@ -24,6 +24,9 @@ tqdm = "*"
 joblib = "*"
 ipyparallel = "*"
 seaborn = "*"
+keras = "*"
+tensorflow = "*"
+gpy = "*"
 
 [dev-packages]
 
