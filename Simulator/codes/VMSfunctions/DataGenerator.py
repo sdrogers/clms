@@ -1,16 +1,14 @@
 import glob
-import math
 import os
-from collections import defaultdict
 
+import math
 import numpy as np
+import pandas as pd
 import pylab as plt
 import pymzml
 from sklearn.neighbors import KernelDensity
-import pandas as pd
-import math
 
-from VMSfunctions.Chromatograms import EmpiricalChromatogram, UnknownChemical
+from VMSfunctions.Chromatograms import EmpiricalChromatogram
 from VMSfunctions.Common import *
 
 
@@ -34,9 +32,9 @@ class Peak(object):
             return NotImplemented
 
         return math.isclose(self.mz, other.mz) and \
-            math.isclose(self.rt, other.rt) and \
-            math.isclose(self.intensity, other.intensity) and \
-            self.ms_level == other.ms_level
+               math.isclose(self.rt, other.rt) and \
+               math.isclose(self.intensity, other.intensity) and \
+               self.ms_level == other.ms_level
 
 
 class RegionOfInterest(object):
@@ -73,10 +71,10 @@ class RegionOfInterest(object):
 
     def __repr__(self):
         return 'ROI %s %s picked %s mz (%.4f-%.4f) rt (%.4f-%.4f) scans (%d-%d)' % (
-        self.file_name, self.mode, self.pickedPeak,
-        self.mzrange[0], self.mzrange[1],
-        self.rtrange[0], self.rtrange[1],
-        self.scrange[0], self.scrange[1])
+            self.file_name, self.mode, self.pickedPeak,
+            self.mzrange[0], self.mzrange[1],
+            self.rtrange[0], self.rtrange[1],
+            self.scrange[0], self.scrange[1])
 
 
 class DataSource(LoggerMixin):
@@ -90,10 +88,10 @@ class DataSource(LoggerMixin):
 
     def __init__(self):
         # A dictionary that stores the actual pymzml spectra for each filename
-        self.file_spectra = {} # key: filename, value: a dict where key is scan_number and value is spectrum
+        self.file_spectra = {}  # key: filename, value: a dict where key is scan_number and value is spectrum
 
         # A dictionary to store the distribution on scan durations for each ms_level in each file
-        self.file_scan_durations = {} # key: filename, value: a dict with key ms level and value scan durations
+        self.file_scan_durations = {}  # key: filename, value: a dict with key ms level and value scan durations
 
         # A dictionary to stores region of interests
         self.all_rois = {}
@@ -112,8 +110,8 @@ class DataSource(LoggerMixin):
         :param mzml_path: the input folder containing the mzML files
         :return: nothing, but the instance variable file_spectra and scan_durations are populated
         """
-        file_scan_durations = {} # key: filename, value: a dict where key is ms level and value is scan durations
-        file_spectra = {} # key: filename, value: a dict where key is scan_number and value is spectrum
+        file_scan_durations = {}  # key: filename, value: a dict where key is ms level and value is scan durations
+        file_spectra = {}  # key: filename, value: a dict where key is scan_number and value is spectrum
         for filename in glob.glob(os.path.join(mzml_path, '*.mzML')):
             fname = os.path.basename(filename)
             if file_name is not None and fname != file_name:
@@ -199,21 +197,21 @@ class DataSource(LoggerMixin):
         :return: an Nx1 numpy array of all the values requested
         """
         if data_type == SCAN_DURATION:
-            if filename is None: # use the scan durations from all files
+            if filename is None:  # use the scan durations from all files
                 values = []
                 for f in self.file_scan_durations:
                     temp = self._get_filtered_scan_durations(f, ms_level, min_rt, max_rt)
                     values.extend(temp)
-            else: # use the scan durations from that file only
+            else:  # use the scan durations from that file only
                 values = self._get_filtered_scan_durations(filename, ms_level, min_rt, max_rt)
         else:
             # get spectra from either one file or all files
-            if filename is None: # use all spectra
+            if filename is None:  # use all spectra
                 all_spectra = []
                 for f in self.file_spectra:
                     spectra_for_f = list(self.file_spectra[f].values())
                     all_spectra.extend(spectra_for_f)
-            else: # use spectra for that file only
+            else:  # use spectra for that file only
                 all_spectra = self.file_spectra[filename].values()
 
             # loop through spectrum and get all peaks above threshold
@@ -239,14 +237,14 @@ class DataSource(LoggerMixin):
                     mzs = list(getattr(x, MZ) for x in spectrum_peaks)
                     intensities = list(getattr(x, INTENSITY) for x in spectrum_peaks)
                     values.extend(list(zip(mzs, intensities)))
-                else: # MZ, INTENSITY or RT
+                else:  # MZ, INTENSITY or RT
                     attrs = list(getattr(x, data_type) for x in spectrum_peaks)
                     values.extend(attrs)
 
         # log-transform if necessary
         X = np.array(values)
         if log:
-            if data_type == MZ_INTENSITY: # just log the intensity part
+            if data_type == MZ_INTENSITY:  # just log the intensity part
                 X[:, 1] = np.log(X[:, 1])
             else:
                 X = np.log(X)
@@ -261,7 +259,7 @@ class DataSource(LoggerMixin):
 
         # return values
         if data_type == MZ_INTENSITY:
-            return sampled_X # it's already a Nx2 array
+            return sampled_X  # it's already a Nx2 array
         else:
             # convert into Nx1 array
             return sampled_X[:, np.newaxis]
@@ -295,7 +293,7 @@ class DataSource(LoggerMixin):
 
             # convert each row of the dataframe to roi objects
             df = self.roi_df[self.roi_df['file'] == fname]
-            for idx, row in df.iterrows(): # TODO: make this faster
+            for idx, row in df.iterrows():  # TODO: make this faster
                 if (idx % 10000 == 0):
                     self.logger.debug('%6d/%6d' % (len(rois_data['rois']), df.shape[0]))
                 file_name = row['file']
@@ -344,7 +342,7 @@ class DataSource(LoggerMixin):
 
             # get spectra for a file
             spectra = self.file_spectra[fname]
-            for scan_id, spectrum in spectra.items(): # loop over all scans
+            for scan_id, spectrum in spectra.items():  # loop over all scans
                 if scan_id % 100 == 0:
                     self.logger.debug('%6d/%6d processing spectrum %s' % (scan_id, len(spectra), spectrum))
                 rt = self._get_rt(spectrum)
@@ -352,7 +350,7 @@ class DataSource(LoggerMixin):
                     # find the ROIs that contain this spectrum peak
                     p = Peak(mz, rt, intensity, spectrum.ms_level)
                     rois = self._get_containing_rois(p, rois_data)
-                    for roi in rois: # if found, assign peaks to ROIs
+                    for roi in rois:  # if found, assign peaks to ROIs
                         roi.add(p)
 
     def save_roi(self, out_file):
@@ -489,7 +487,7 @@ class PeakDensityEstimator(LoggerMixin):
             min_intensity = self.min_ms1_intensity if ms_level == 1 else self.min_ms2_intensity
             log = True if data_type == MZ_INTENSITY else False
             X = data_source.get_data(data_type, filename, ms_level, min_intensity=min_intensity,
-                                      min_rt=self.min_rt, max_rt=self.max_rt, log=log, max_data=max_data)
+                                     min_rt=self.min_rt, max_rt=self.max_rt, log=log, max_data=max_data)
 
             # fit kde
             bandwidth = param['bandwidth']
@@ -544,7 +542,7 @@ class PeakSampler(LoggerMixin):
             mz = vals[0, 0]
             rt = vals[0, 2]
             p = Peak(mz, rt, intensity, ms_level)
-            if self._is_valid(p, min_mz, max_mz, min_rt, max_rt, min_intensity): # othwerise we just keep rejecting
+            if self._is_valid(p, min_mz, max_mz, min_rt, max_rt, min_intensity):  # othwerise we just keep rejecting
                 peaks.append(p)
         return peaks
 

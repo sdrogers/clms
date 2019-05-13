@@ -1,5 +1,3 @@
-from collections import defaultdict
-
 import numpy as np
 from psims.mzml.writer import MzMLWriter as PsimsMzMLWriter
 
@@ -20,10 +18,8 @@ class MzmlWriter(object):
         self.scans = scans
         self.precursor_information = precursor_information
 
-
     def write_mzML(self, out_file):
         with PsimsMzMLWriter(open(out_file, 'wb')) as writer:
-
             # add default controlled vocabularies
             writer.controlled_vocabularies()
 
@@ -38,11 +34,10 @@ class MzmlWriter(object):
                 with writer.chromatogram_list(count=1):
                     tic_rts, tic_intensities = self._get_tic_chromatogram(self.scans)
                     writer.write_chromatogram(tic_rts, tic_intensities, id='tic',
-                                           chromatogram_type='total ion current chromatogram',
-                                           time_unit='second')
+                                              chromatogram_type='total ion current chromatogram',
+                                              time_unit='second')
 
         writer.close()
-
 
     def _write_info(self, out):
         # check file contains what kind of spectra
@@ -77,7 +72,7 @@ class MzmlWriter(object):
         return all_scans
 
     def _write_spectra(self, writer, scans, precursor_information):
-        assert len(scans) <= 3 # NOTE: we only support writing up to ms2 scans for now
+        assert len(scans) <= 3  # NOTE: we only support writing up to ms2 scans for now
 
         # get all scans across different ms_levels and sort them by scan_id
         all_scans = []
@@ -124,7 +119,7 @@ class MzmlWriter(object):
 
         out.write_spectrum(
             scan.mzs, scan.intensities,
-            id= self._get_scan_id(scan.scan_id),
+            id=self._get_scan_id(scan.scan_id),
             centroided=True,
             scan_start_time=scan.rt / 60.0,
             scan_window_list=[DEFAULT_MS1_SCAN_WINDOW],

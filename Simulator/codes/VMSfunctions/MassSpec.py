@@ -4,9 +4,6 @@ from events import Events
 
 from VMSfunctions.Chromatograms import *
 from VMSfunctions.Common import *
-import pandas as pd
-
-
 # controller sends scan request
 # mass spec generates scans (is an iterator over scans)
 # scan contains: mz list, intensity list, rt, ms_level, precursor_mass, window

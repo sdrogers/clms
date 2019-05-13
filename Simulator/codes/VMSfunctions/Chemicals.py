@@ -1,5 +1,6 @@
 import copy
 import re
+
 import scipy
 import scipy.stats
 
@@ -103,7 +104,7 @@ class Isotopes(object):
 
 
 class Adducts(object):
-    def __init__(self, formula, adduct_proportion_cutoff = 0.05):
+    def __init__(self, formula, adduct_proportion_cutoff=0.05):
         self.adduct_names = list(POS_TRANSFORMATIONS.keys())
         self.formula = formula
         self.adduct_proportion_cutoff = adduct_proportion_cutoff
@@ -119,12 +120,12 @@ class Adducts(object):
     def _get_adduct_proportions(self):
         # TODO: replace this with something proper
         prior = np.ones(len(self.adduct_names)) * 0.1
-        prior[0] = 1.0 # give more weight to the first one, i.e. M+H
+        prior[0] = 1.0  # give more weight to the first one, i.e. M+H
         proportions = np.random.dirichlet(prior)
         while max(proportions) < 0.2:
             proportions = np.random.dirichlet(prior)
-        proportions[np.where(proportions<self.adduct_proportion_cutoff)] = 0
-        proportions = proportions/max(proportions)
+        proportions[np.where(proportions < self.adduct_proportion_cutoff)] = 0
+        proportions = proportions / max(proportions)
         proportions.tolist()
         return proportions
 
@@ -174,7 +175,8 @@ class KnownChemical(Chemical):
         self.ms_level = 1
 
     def __repr__(self):
-        return 'KnownChemical - %r rt=%.2f max_intensity=%.2f' % (self.formula.formula_string, self.rt, self.max_intensity)
+        return 'KnownChemical - %r rt=%.2f max_intensity=%.2f' % (
+        self.formula.formula_string, self.rt, self.max_intensity)
 
 
 class MSN(Chemical):
@@ -198,8 +200,9 @@ class ChemicalCreator(LoggerMixin):
     def __init__(self, peak_sampler):
         self.peak_sampler = peak_sampler
 
-    def sample(self, chromatogram_creator, mz_range, rt_range, min_ms1_intensity, n_ms1_peaks, ms_levels=2, chemical_type=None,
-               formula_list=None, compound_list=None, alpha=math.inf, fixed_mz=False, adduct_proportion_cutoff = 0.05):
+    def sample(self, chromatogram_creator, mz_range, rt_range, min_ms1_intensity, n_ms1_peaks, ms_levels=2,
+               chemical_type=None,
+               formula_list=None, compound_list=None, alpha=math.inf, fixed_mz=False, adduct_proportion_cutoff=0.05):
         self.n_ms1_peaks = n_ms1_peaks
         self.ms_levels = ms_levels
         self.formula_list = formula_list
@@ -217,9 +220,10 @@ class ChemicalCreator(LoggerMixin):
         self.logger.debug("{} ms1 peaks to be created.".format(n_ms1))
         formula = None
         chemicals = []
-        sampled_peaks = self.peak_sampler.sample(1, n_ms1, mz_range[0][0], mz_range[0][1], rt_range[0][0], rt_range[0][1], min_ms1_intensity)
+        sampled_peaks = self.peak_sampler.sample(1, n_ms1, mz_range[0][0], mz_range[0][1], rt_range[0][0],
+                                                 rt_range[0][1], min_ms1_intensity)
         if chemical_type == "Known" and compound_list != None:
-            if len(compound_list)<n_ms1:
+            if len(compound_list) < n_ms1:
                 self.logger.warning('compound_list not long enough')
                 return
             self.formula_list = self._sample_formulae(sampled_peaks)
@@ -236,8 +240,8 @@ class ChemicalCreator(LoggerMixin):
             chemicals.append(chem)
             if i % 25 == 0:
                 self.logger.debug("i = {}".format(i))
-        return chemicals        
-        
+        return chemicals
+
     def sample_from_chromatograms(self, chromatogram_creator, min_rt, max_rt, min_ms1_intensity, ms_levels=2):
         self.ms_levels = ms_levels
         self.min_rt = min_rt
@@ -266,7 +270,7 @@ class ChemicalCreator(LoggerMixin):
                     self.logger.debug("i = {}".format(i))
         self.logger.info('Created %d chemicals' % len(chemicals))
         return chemicals
-    
+
     def _sample_formulae(self, sampled_peaks):
         formula_list = []
         compound_mass_list = []
@@ -279,8 +283,8 @@ class ChemicalCreator(LoggerMixin):
             mz_peak_sample = sampled_peaks[formula_index].mz
             formula_list.append(compound_list[takeClosest(compound_mass_list, mz_peak_sample)].chemical_formula)
         return formula_list
-        
-    def _get_children(self, parent_ms_level, parent): # TODO: this should be moved to the mass spec class
+
+    def _get_children(self, parent_ms_level, parent):  # TODO: this should be moved to the mass spec class
         children_ms_level = parent_ms_level + 1
         n_peaks = self._get_n(children_ms_level)
         if n_peaks == None:
@@ -290,7 +294,10 @@ class ChemicalCreator(LoggerMixin):
             kids_intensity_proportions = self._get_msn_proportions(children_ms_level, n_peaks)
             if self.alpha < math.inf:
                 for index_children in range(n_peaks):
-                    next_crp, self.counts[children_ms_level-1] = Restricted_Crp(self.alpha, self.counts[children_ms_level-1], self.crp_index[children_ms_level-1], index_children)
+                    next_crp, self.counts[children_ms_level - 1] = Restricted_Crp(self.alpha,
+                                                                                  self.counts[children_ms_level - 1],
+                                                                                  self.crp_index[children_ms_level - 1],
+                                                                                  index_children)
                     self.crp_index[children_ms_level - 1].append(next_crp)
                     if next_crp == max(self.crp_index[children_ms_level - 1]):
                         kid = self._get_unknown_msn(children_ms_level, None, None, parent)
@@ -303,7 +310,7 @@ class ChemicalCreator(LoggerMixin):
                         kid.parent_mass_prop = self._get_parent_mass_prop(children_ms_level)
                         kid.parent = parent
                     kids.append(kid)
-                self.crp_samples[children_ms_level-1].extend(kids)
+                self.crp_samples[children_ms_level - 1].extend(kids)
             else:
                 for index_children in range(n_peaks):
                     kid = self._get_unknown_msn(children_ms_level, None, None, parent)
@@ -312,8 +319,8 @@ class ChemicalCreator(LoggerMixin):
                         kid.children = self._get_children(children_ms_level, kid)
                     kids.append(kid)
             return kids
-        
-    def _get_msn_proportions(self, children_ms_level,n_peaks):
+
+    def _get_msn_proportions(self, children_ms_level, n_peaks):
         if children_ms_level == 2:
             kids_intensities = self.peak_sampler.sample(children_ms_level, n_peaks)
         else:
@@ -329,7 +336,7 @@ class ChemicalCreator(LoggerMixin):
         elif ms_level == 2:
             return int(self.peak_sampler.density_estimator.n_peaks(2, 1))
         else:
-            return int(math.floor(self.peak_sampler.density_estimator.n_peaks(2, 1) / (5**(ms_level-2))))
+            return int(math.floor(self.peak_sampler.density_estimator.n_peaks(2, 1) / (5 ** (ms_level - 2))))
 
     def _get_chemical(self, ms_level, formula, chromatogram, sampled_peak):
         if formula != None:
@@ -338,7 +345,7 @@ class ChemicalCreator(LoggerMixin):
             return self._get_unknown_msn(ms_level, chromatogram, sampled_peak)
 
     def _get_known_ms1(self, formula, chromatogram, sampled_peak):
-        mz = Formula(formula).mass 
+        mz = Formula(formula).mass
         rt = sampled_peak.rt
         intensity = sampled_peak.intensity
         formula = Formula(formula)
@@ -376,10 +383,10 @@ class ChemicalCreator(LoggerMixin):
 
 
 class MultiSampleCreator(LoggerMixin):
-    
+
     def __init__(self, original_dataset, n_samples, classes, intensity_noise_sd,
-                 change_probabilities, change_differences_means, change_differences_sds, dropout_probabilities = None,
-                 experimental_classes = None, experimental_probabilitities = None, experimental_sds = None):
+                 change_probabilities, change_differences_means, change_differences_sds, dropout_probabilities=None,
+                 experimental_classes=None, experimental_probabilitities=None, experimental_sds=None):
         self.original_dataset = original_dataset
         self.n_samples = n_samples
         self.classes = classes
@@ -391,7 +398,7 @@ class MultiSampleCreator(LoggerMixin):
         self.experimental_classes = experimental_classes
         self.experimental_probabilitities = experimental_probabilitities
         self.experimental_sds = experimental_sds
-        
+
         self.sample_classes = []
         for index_classes in range(len(self.classes)):
             self.sample_classes.extend([self.classes[index_classes] for i in range(n_samples[index_classes])])
@@ -401,10 +408,10 @@ class MultiSampleCreator(LoggerMixin):
             self.sample_experimental_statuses = self._get_experimental_statuses()
             self.experimental_effects = self._get_experimental_effects()
         self.logger.debug("Classes, Statuses and Differences defined.")
-        
+
         self.samples = []
         for index_sample in range(sum(self.n_samples)):
-            self.logger.debug("Dataset {} of {} created.".format(index_sample+1,sum(self.n_samples)))
+            self.logger.debug("Dataset {} of {} created.".format(index_sample + 1, sum(self.n_samples)))
             new_sample = copy.deepcopy(self.original_dataset)
             which_class = np.where(np.array(self.classes) == self.sample_classes[index_sample])
             for index_chemical in range(len(new_sample)):
@@ -414,47 +421,54 @@ class MultiSampleCreator(LoggerMixin):
                     adjusted_intensity = self._get_experimental_factor_effect(intensity, index_sample, index_chemical)
                     noisy_adjusted_intensity = self._get_noisy_intensity(adjusted_intensity)
                     new_sample[index_chemical].max_intensity = noisy_adjusted_intensity.tolist()[0]
-            chemicals_to_keep = np.where((np.array(self.chemical_statuses)[which_class][0])!="missing")
+            chemicals_to_keep = np.where((np.array(self.chemical_statuses)[which_class][0]) != "missing")
             new_sample = np.array(new_sample)[chemicals_to_keep].tolist()
             self.samples.append(new_sample)
-            
+
     def _get_chemical_statuses(self):
         chemical_statuses = [np.array(["unchanged" for i in range(len(self.original_dataset))])]
-        chemical_statuses.extend([np.random.choice(["changed","unchanged"],len(self.original_dataset),p =[self.change_probabilities[i],1 - self.change_probabilities[i]]) for i in range(len(self.classes)-1)])
+        chemical_statuses.extend([np.random.choice(["changed", "unchanged"], len(self.original_dataset),
+                                                   p=[self.change_probabilities[i], 1 - self.change_probabilities[i]])
+                                  for i in range(len(self.classes) - 1)])
         if self.dropout_probabilities is not None:
             for index_chemical in range(len(chemical_statuses)):
-                missing = np.where(np.random.binomial(1,self.dropout_probabilities[index_chemical], len(chemical_statuses[index_chemical])))
+                missing = np.where(np.random.binomial(1, self.dropout_probabilities[index_chemical],
+                                                      len(chemical_statuses[index_chemical])))
                 chemical_statuses[index_chemical][missing] = "missing"
         return chemical_statuses
-    
+
     def _get_experimental_statuses(self):
-            experimental_statuses = []
-            for i in range(len(self.experimental_classes)):
-                class_allocation = np.random.choice(self.experimental_classes[i],sum(self.n_samples),p =self.experimental_probabilitities[i])
-                experimental_statuses.append(class_allocation)
-            return experimental_statuses
-        
+        experimental_statuses = []
+        for i in range(len(self.experimental_classes)):
+            class_allocation = np.random.choice(self.experimental_classes[i], sum(self.n_samples),
+                                                p=self.experimental_probabilitities[i])
+            experimental_statuses.append(class_allocation)
+        return experimental_statuses
+
     def _get_experimental_effects(self):
         experimental_effects = []
         for i in range(len(self.experimental_classes)):
-            coef = [np.random.normal(0,self.experimental_sds[i],len(self.experimental_classes[i])) for j in range(len(self.original_dataset))]
+            coef = [np.random.normal(0, self.experimental_sds[i], len(self.experimental_classes[i])) for j in
+                    range(len(self.original_dataset))]
             experimental_effects.append(coef)
         return experimental_effects
-    
+
     def _get_chemical_differences_from_class1(self):
-        chemical_differences_from_class1 = [np.array([0 for i in range(len(self.original_dataset))]) for j in range(len(self.classes))]
-        for index_classes in range(1,len(self.classes)):
-            coef_mean = self.change_differences_means[index_classes-1]
-            coef_sd = self.change_differences_sds[index_classes-1]
-            coef_len = sum(self.chemical_statuses[index_classes]=="changed")
+        chemical_differences_from_class1 = [np.array([0 for i in range(len(self.original_dataset))]) for j in
+                                            range(len(self.classes))]
+        for index_classes in range(1, len(self.classes)):
+            coef_mean = self.change_differences_means[index_classes - 1]
+            coef_sd = self.change_differences_sds[index_classes - 1]
+            coef_len = sum(self.chemical_statuses[index_classes] == "changed")
             coef = np.random.normal(coef_mean, coef_sd, coef_len)
-            chemical_differences_from_class1[index_classes][np.where(self.chemical_statuses[index_classes]=="changed")] = coef
+            chemical_differences_from_class1[index_classes][
+                np.where(self.chemical_statuses[index_classes] == "changed")] = coef
         return chemical_differences_from_class1
-        
-    def _get_intensity(self,original_intensity, which_class, index_chemical):
+
+    def _get_intensity(self, original_intensity, which_class, index_chemical):
         intensity = original_intensity + self.chemical_differences_from_class1[which_class[0][0]][index_chemical]
         return intensity
-    
+
     def _get_experimental_factor_effect(self, intensity, index_sample, index_chemical):
         experimental_factor_effect = 0.0
         if self.experimental_classes == None:
@@ -462,13 +476,14 @@ class MultiSampleCreator(LoggerMixin):
         else:
             for index_factor in range(len(self.experimental_classes)):
                 which_experimental_status = self.sample_experimental_statuses[index_factor][index_sample]
-                which_experimental_class = np.where(np.array(self.experimental_classes[index_factor])==which_experimental_status)
-                experimental_factor_effect += self.experimental_effects[index_factor][index_chemical][which_experimental_class]        
+                which_experimental_class = np.where(
+                    np.array(self.experimental_classes[index_factor]) == which_experimental_status)
+                experimental_factor_effect += self.experimental_effects[index_factor][index_chemical][
+                    which_experimental_class]
         return intensity + experimental_factor_effect
-    
-    def _get_noisy_intensity(self,adjusted_intensity):
-        noisy_intensity = adjusted_intensity + np.random.normal(0,self.intensity_noise_sd[0],1)
+
+    def _get_noisy_intensity(self, adjusted_intensity):
+        noisy_intensity = adjusted_intensity + np.random.normal(0, self.intensity_noise_sd[0], 1)
         if noisy_intensity < 0:
             print("Warning: Negative Intensities have been created")
         return noisy_intensity
-        

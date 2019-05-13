@@ -2,8 +2,8 @@ import collections
 import gzip
 import logging
 import pickle
-
 from bisect import bisect_left
+
 from sklearn.externals import joblib
 
 # some useful constants
@@ -64,24 +64,25 @@ def chromatogramDensityNormalisation(rts, intensities):
     new_intensities = [x * (1 / area) for x in intensities]
     return new_intensities
 
+
 # TODO: add other options
 # Note: M+H should come first in this dict because of the prior specification
 POS_TRANSFORMATIONS = collections.OrderedDict()
-POS_TRANSFORMATIONS['M+H'] = lambda mz : (mz + PROTON_MASS)
-POS_TRANSFORMATIONS['[M+ACN]+H'] = lambda mz : (mz + 42.033823)
-POS_TRANSFORMATIONS['[M+CH3OH]+H'] = lambda mz : (mz + 33.033489)
-POS_TRANSFORMATIONS['[M+NH3]+H'] = lambda mz : (mz + 18.033823)
-POS_TRANSFORMATIONS['M+Na'] = lambda mz : (mz + 22.989218)
-POS_TRANSFORMATIONS['M+K'] = lambda mz : (mz + 38.963158)
-POS_TRANSFORMATIONS['M+2Na-H'] = lambda mz : (mz + 44.971160)
-POS_TRANSFORMATIONS['M+ACN+Na'] = lambda mz : (mz + 64.015765)
-POS_TRANSFORMATIONS['M+2Na-H'] = lambda mz : (mz + 44.971160)
-POS_TRANSFORMATIONS['M+2K+H'] = lambda mz : (mz + 76.919040)
-POS_TRANSFORMATIONS['[M+DMSO]+H'] = lambda mz : (mz + 79.02122)
-POS_TRANSFORMATIONS['[M+2ACN]+H'] = lambda mz : (mz + 83.060370)
-POS_TRANSFORMATIONS['2M+H'] = lambda mz : (mz * 2) + 1.007276
-POS_TRANSFORMATIONS['M+ACN+Na'] = lambda mz : (mz + 64.015765)
-POS_TRANSFORMATIONS['2M+NH4'] = lambda mz : (mz * 2) + 18.033823
+POS_TRANSFORMATIONS['M+H'] = lambda mz: (mz + PROTON_MASS)
+POS_TRANSFORMATIONS['[M+ACN]+H'] = lambda mz: (mz + 42.033823)
+POS_TRANSFORMATIONS['[M+CH3OH]+H'] = lambda mz: (mz + 33.033489)
+POS_TRANSFORMATIONS['[M+NH3]+H'] = lambda mz: (mz + 18.033823)
+POS_TRANSFORMATIONS['M+Na'] = lambda mz: (mz + 22.989218)
+POS_TRANSFORMATIONS['M+K'] = lambda mz: (mz + 38.963158)
+POS_TRANSFORMATIONS['M+2Na-H'] = lambda mz: (mz + 44.971160)
+POS_TRANSFORMATIONS['M+ACN+Na'] = lambda mz: (mz + 64.015765)
+POS_TRANSFORMATIONS['M+2Na-H'] = lambda mz: (mz + 44.971160)
+POS_TRANSFORMATIONS['M+2K+H'] = lambda mz: (mz + 76.919040)
+POS_TRANSFORMATIONS['[M+DMSO]+H'] = lambda mz: (mz + 79.02122)
+POS_TRANSFORMATIONS['[M+2ACN]+H'] = lambda mz: (mz + 83.060370)
+POS_TRANSFORMATIONS['2M+H'] = lambda mz: (mz * 2) + 1.007276
+POS_TRANSFORMATIONS['M+ACN+Na'] = lambda mz: (mz + 64.015765)
+POS_TRANSFORMATIONS['2M+NH4'] = lambda mz: (mz * 2) + 18.033823
 
 
 def adduct_transformation(mz, adduct):

@@ -1,9 +1,8 @@
+import sys
 from collections import namedtuple
 
 import pylab as plt
-import pandas as pd
 from tqdm import tqdm
-import sys
 
 from VMSfunctions.MassSpec import *
 from VMSfunctions.MzmlWriter import *
@@ -99,9 +98,9 @@ class TopNController(Controller):
         self.last_ms1_scan = None
         self.N = N
         self.isolation_window = isolation_window  # the isolation window (in Dalton) to select a precursor ion
-        self.mz_tol = mz_tol # the m/z window (ppm) to prevent the same precursor ion to be fragmented again
+        self.mz_tol = mz_tol  # the m/z window (ppm) to prevent the same precursor ion to be fragmented again
         self.rt_tol = rt_tol  # the rt window to prevent the same precursor ion to be fragmented again
-        self.min_ms1_intensity = min_ms1_intensity # minimum ms1 intensity to fragment
+        self.min_ms1_intensity = min_ms1_intensity  # minimum ms1 intensity to fragment
         if exclusion_list is None:
             exclusion_list = []
         self.exclusion_list = exclusion_list  # a list of ExclusionItem
@@ -132,7 +131,7 @@ class TopNController(Controller):
 
     def _process_scan(self, scan):
         self.logger.info('Received {}'.format(scan))
-        if scan.ms_level == 1: # we get an ms1 scan, if it has a peak, then store it for fragmentation next time
+        if scan.ms_level == 1:  # we get an ms1 scan, if it has a peak, then store it for fragmentation next time
             if scan.num_peaks > 0:
                 self.last_ms1_scan = scan
             else:
@@ -165,7 +164,8 @@ class TopNController(Controller):
                     break
 
                 if intensity < self.min_ms1_intensity:
-                    self.logger.debug('Minimum intensity threshold %f reached at %f' % (self.min_ms1_intensity, intensity))
+                    self.logger.debug(
+                        'Minimum intensity threshold %f reached at %f' % (self.min_ms1_intensity, intensity))
                     break
 
                 # skip ion in the dynamic exclusion list
@@ -324,13 +324,14 @@ class KaufmannWindows(object):
             else:
                 locations_internal[2][0].append((bin_walls[(5 + i * 16)], bin_walls[(7 + i * 16)]))
                 locations_internal[2][0].append((bin_walls[(13 + i * 16)], bin_walls[(15 + i * 16)]))
-        if extra_bins > 0: # TODO: fix this
+        if extra_bins > 0:  # TODO: fix this
             for j in range(extra_bins):
                 for i in range(64 * (2 ** j)):
                     locations_internal[n_locations_internal + j][0].append((bin_walls_extra[int(
                         0 + i * ((2 ** extra_bins) / (2 ** j)))], bin_walls_extra[int(
                         ((2 ** extra_bins) / (2 ** j)) / 2 + i * ((2 ** extra_bins) / (2 ** j)))]))
         self.locations.extend(locations_internal)
+
 
 class DiaWindows(object):
     """
@@ -386,6 +387,7 @@ class DiaWindows(object):
         else:
             raise ValueError("Incorrect dia_design selected. Must be 'basic' or 'kaufmann'.")
 
+
 class DsDAController(Controller):
     def __init__(self, mass_spec, N, isolation_window, rt_tol, min_ms1_intensity, exclusion_list=None):
         super().__init__(mass_spec)
@@ -393,7 +395,7 @@ class DsDAController(Controller):
         self.N = N
         self.isolation_window = isolation_window  # the isolation window (in Dalton) around a precursor ion to be fragmented
         self.rt_tol = rt_tol  # the rt window to prevent the same precursor ion to be fragmented again
-        self.min_ms1_intensity = min_ms1_intensity # minimum ms1 intensity to fragment
+        self.min_ms1_intensity = min_ms1_intensity  # minimum ms1 intensity to fragment
 
         mass_spec.reset()
         default_scan = ScanParameters()
@@ -409,7 +411,8 @@ class DsDAController(Controller):
     def run(self, schedule_file, progress_bar=True):
         self.schedule = pd.read_csv(schedule_file)
         if progress_bar:
-            with tqdm(total=self.schedule["targetTime"].values[-1] - self.schedule["targetTime"].values[0], initial=0) as pbar:
+            with tqdm(total=self.schedule["targetTime"].values[-1] - self.schedule["targetTime"].values[0],
+                      initial=0) as pbar:
                 self.mass_spec.run(self.schedule, pbar=pbar)
         else:
             self.mass_spec.run(self.schedule)
@@ -422,8 +425,8 @@ class DsDAController(Controller):
 
     def _process_scan(self, scan):
         self.logger.info('Received {}'.format(scan))
-        if scan.ms_level == 1: # we get an ms1 scan, store it for fragmentation next time
-            self.last_ms1_scan = scan  
+        if scan.ms_level == 1:  # we get an ms1 scan, store it for fragmentation next time
+            self.last_ms1_scan = scan
         elif scan.ms_level == 2:  # if we get ms2 scan, then do something with it
             # scan.filter_intensity(self.min_ms2_intensity)
             if scan.num_peaks > 0:
@@ -437,8 +440,9 @@ class DsDAController(Controller):
             rt = scan.rt
 
             next_row = np.where(np.array(self.schedule["targetTime"]) == rt)[0].tolist()[0] + 1
-            mzs = np.array([self.schedule["targetMass"][i] for i in range(next_row,min(next_row+4,self.schedule.shape[0]),1)])
-            
+            mzs = np.array(
+                [self.schedule["targetMass"][i] for i in range(next_row, min(next_row + 4, self.schedule.shape[0]), 1)])
+
             for i in range(len(mzs)):  # define isolation window around the selected precursor ions
 
                 mz = mzs[i]
@@ -459,7 +463,7 @@ class DsDAController(Controller):
                 dda_scan_params = ScanParameters()
                 dda_scan_params.set(ScanParameters.MS_LEVEL, 2)
                 dda_scan_params.set(ScanParameters.ISOLATION_WINDOWS, isolation_windows)
-                #dda_scan_params.set(ScanParameters.PRECURSOR, precursor)
+                # dda_scan_params.set(ScanParameters.PRECURSOR, precursor)
                 self.mass_spec.add_to_queue(dda_scan_params)  # push this dda scan to the mass spec queue
 
             # set this ms1 scan as has been processed

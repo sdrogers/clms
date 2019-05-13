@@ -1,6 +1,4 @@
-from random import random
 import numpy as np
-import math
 
 
 def discrete_draw(p):
@@ -9,11 +7,12 @@ def discrete_draw(p):
     rv = np.random.multinomial(1, probs)
     return int(np.where(np.random.multinomial(1, probs) == 1)[0])
 
+
 def Restricted_Crp(alpha, previous_counts, previous_ms2, len_current_ms2):
     # Draws a value from a Chinese Restaurant process, but excludes values already part of the current sample
     n = len(previous_ms2)
     if previous_ms2 == []:
-        return 0, [1]        
+        return 0, [1]
     assign_probs = [None] * (len(previous_counts) + 1)
     index_to_zero = previous_ms2[-(len_current_ms2):]
     for i in range(len(previous_counts)):

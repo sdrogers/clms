@@ -1,6 +1,5 @@
 import pandas as pd
 import scipy.stats
-import numpy as np
 
 from VMSfunctions.Chemicals import *
 
@@ -35,9 +34,9 @@ class EmpiricalChromatogram(Chromatogram):
 
         # normalise arrays
         self.rts = rts - min(rts)
-        self.mzs = mzs - np.mean(mzs) # may want to just set this to 0 and remove from input
+        self.mzs = mzs - np.mean(mzs)  # may want to just set this to 0 and remove from input
         self.intensities = self.raw_intensities / max(self.raw_intensities)
-        #chromatogramDensityNormalisation(rts, intensities)
+        # chromatogramDensityNormalisation(rts, intensities)
 
         self.roi = roi
         self.min_rt = min(self.rts)
@@ -90,8 +89,8 @@ class EmpiricalChromatogram(Chromatogram):
             return NotImplemented
 
         return np.array_equal(sorted(self.raw_mzs), sorted(other.raw_mzs)) and \
-                np.array_equal(sorted(self.raw_rts), sorted(other.raw_rts)) and \
-                np.array_equal(sorted(self.raw_intensities), sorted(other.raw_intensities))
+               np.array_equal(sorted(self.raw_rts), sorted(other.raw_rts)) and \
+               np.array_equal(sorted(self.raw_intensities), sorted(other.raw_intensities))
 
 
 # Make this more generalisable. Make scipy.stats... as input, However this makes it difficult to do the cutoff
@@ -143,15 +142,15 @@ class ChromatogramCreator(LoggerMixin):
         self.max_intensities = max_intensities[idx]
         self.chemicals = chemicals
 
-    def sample(self, intensity = None):
+    def sample(self, intensity=None):
         """
         Samples a chromatogram
         :param intensity: the intensity to select the closest chromatogram
         :return: a Chromatogram object
         """
-        if intensity == None: # randomly sample chromatograms
+        if intensity == None:  # randomly sample chromatograms
             selected = np.random.choice(len(self.chromatograms), 1)[0]
-        else: # find the chromatogram closest to the intensity
+        else:  # find the chromatogram closest to the intensity
             selected = takeClosest(self.max_intensities, intensity)
         return self.chromatograms[selected]
 

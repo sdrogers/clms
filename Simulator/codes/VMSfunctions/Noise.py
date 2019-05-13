@@ -1,5 +1,4 @@
 import math
-
 import numpy as np
 import pylab as plt
 
@@ -15,7 +14,7 @@ class RoiToChemicalCreator(ChemicalCreator):
         # otherwise we use the ROIs from all files found in the data source
         if filename is not None:
             rois_data = data_source.all_rois[filename]['rois']
-        else: # combine the extracted ROIs for all files
+        else:  # combine the extracted ROIs for all files
             rois_data = []
             for filename in data_source.all_rois:
                 rois_data.extend(data_source.all_rois[filename]['rois'])
@@ -26,7 +25,8 @@ class RoiToChemicalCreator(ChemicalCreator):
         self.alpha = math.inf
         self.counts = [[] for i in range(self.ms_levels)]
         if self.ms_levels > 2:
-            self.logger.warning("Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
+            self.logger.warning(
+                "Warning ms_level > 3 not implemented properly yet. Uses scaled ms_level = 2 information for now")
 
         # collect the regions of interest that contain no peaks
         false_rois = [roi for roi in rois_data if not roi.pickedPeak]
@@ -51,7 +51,7 @@ class RoiToChemicalCreator(ChemicalCreator):
             if chrom is not None and self._valid_roi(roi, min_ms1_intensity=min_ms1_intensity):
                 chem = self.to_unknown_chemical(chrom)
                 try:
-                    chem.children = self._get_children(1, chem) # TODO: this should happen inside the mass spec class
+                    chem.children = self._get_children(1, chem)  # TODO: this should happen inside the mass spec class
                 except KeyError:
                     pass
                 self.chromatograms.append(chrom)
@@ -77,7 +77,7 @@ class RoiToChemicalCreator(ChemicalCreator):
         return True
 
     def to_unknown_chemical(self, chrom):
-        idx = np.argmax(chrom.raw_intensities) # find intensity apex
+        idx = np.argmax(chrom.raw_intensities)  # find intensity apex
         mz = chrom.raw_mzs[idx]
 
         # In the MassSpec, we assume that chemical starts eluting from chem.rt + chem.chromatogram.rts (normalised to start from 0)
