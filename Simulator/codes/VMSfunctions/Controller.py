@@ -87,13 +87,11 @@ class SimpleMs1Controller(Controller):
         pass  # do nothing
 
 
-ExclusionItem = namedtuple('ExclusionItem', 'from_mz to_mz from_rt to_rt')
-
 Precursor = namedtuple('Precursor', 'precursor_mz precursor_intensity precursor_charge precursor_scan_id')
 
 
 class TopNController(Controller):
-    def __init__(self, mass_spec, N, isolation_window, mz_tol, rt_tol, min_ms1_intensity, exclusion_list=None):
+    def __init__(self, mass_spec, N, isolation_window, mz_tol, rt_tol, min_ms1_intensity):
         super().__init__(mass_spec)
         self.last_ms1_scan = None
         self.N = N
@@ -101,9 +99,6 @@ class TopNController(Controller):
         self.mz_tol = mz_tol  # the m/z window (ppm) to prevent the same precursor ion to be fragmented again
         self.rt_tol = rt_tol  # the rt window to prevent the same precursor ion to be fragmented again
         self.min_ms1_intensity = min_ms1_intensity  # minimum ms1 intensity to fragment
-        if exclusion_list is None:
-            exclusion_list = []
-        self.exclusion_list = exclusion_list  # a list of ExclusionItem
 
         mass_spec.reset()
         default_scan = ScanParameters()
@@ -168,8 +163,8 @@ class TopNController(Controller):
                         'Minimum intensity threshold %f reached at %f' % (self.min_ms1_intensity, intensity))
                     break
 
-                # skip ion in the dynamic exclusion list
-                if self._exclude(mz, rt, self.exclusion_list):
+                # skip ion in the dynamic exclusion list of the mass spec
+                if self.mass_spec.exclude(mz, rt):
                     continue
 
                 # create precursor object
@@ -192,35 +187,14 @@ class TopNController(Controller):
                 dda_scan_params.set(ScanParameters.MS_LEVEL, 2)
                 dda_scan_params.set(ScanParameters.ISOLATION_WINDOWS, isolation_windows)
                 dda_scan_params.set(ScanParameters.PRECURSOR, precursor)
+                dda_scan_params.set(ScanParameters.MZ_ION, mz)
+                dda_scan_params.set(ScanParameters.DYNAMIC_EXCLUSION_MZ_TOL, self.mz_tol)
+                dda_scan_params.set(ScanParameters.DYNAMIC_EXCLUSION_RT_TOL, self.rt_tol)
                 self.mass_spec.add_to_queue(dda_scan_params)  # push this dda scan to the mass spec queue
                 fragmented_count += 1
 
-                # update dynamic exclusion list to prevent the same precursor ion being fragmented multiple times in
-                # the same mz and rt window
-                mz_lower = mz * (1 - self.mz_tol / 1e6)
-                mz_upper = mz * (1 + self.mz_tol / 1e6)
-                rt_lower = rt - self.rt_tol if rt - self.rt_tol > 0 else 0
-                rt_upper = rt + self.rt_tol
-                x = ExclusionItem(from_mz=mz_lower, to_mz=mz_upper, from_rt=rt_lower, to_rt=rt_upper)
-                self.logger.debug('Dynamic exclusion from_mz {:.4f} to_mz {:.4f} from_rt {:.2f} to_rt {:.2f}'.format(
-                    x.from_mz, x.to_mz, x.from_rt, x.to_rt
-                ))
-                self.exclusion_list.append(x)
-
             # set this ms1 scan as has been processed
             self.last_ms1_scan = None
-
-            # remove expired items from dynamic exclusion list
-            self.exclusion_list = list(filter(lambda x: x.to_rt > rt, self.exclusion_list))
-
-    def _exclude(self, mz, rt, exclusion_list):  # TODO: make this faster?
-        for x in exclusion_list:
-            exclude_mz = x.from_mz < mz < x.to_mz
-            exclude_rt = x.from_rt < rt < x.to_rt
-            if exclude_mz and exclude_rt:
-                self.logger.debug('Excluded precursor ion mz {:.4f} rt {:.2f}'.format(mz, rt))
-                return True
-        return False
 
 
 class TreeController(Controller):

@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections import namedtuple
 
 from events import Events
 
@@ -50,6 +51,9 @@ class ScanParameters(object):
     MS_LEVEL = 'ms_level'
     ISOLATION_WINDOWS = 'isolation_windows'
     PRECURSOR = 'precursor'
+    MZ_ION = 'mz'
+    DYNAMIC_EXCLUSION_MZ_TOL = 'mz_tol'
+    DYNAMIC_EXCLUSION_RT_TOL = 'rt_tol'
 
     def __init__(self):
         self.params = {}
@@ -122,6 +126,9 @@ class MassSpectrometer(LoggerMixin):
         e.targets = []
 
 
+ExclusionItem = namedtuple('ExclusionItem', 'from_mz to_mz from_rt to_rt')
+
+
 # Independent here refers to how the intensity of each peak in a scan is independent of each other
 # i.e. there's no ion supression effect
 class IndependentMassSpectrometer(MassSpectrometer):
@@ -139,6 +146,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
         chem_rts = np.array([chem.rt for chem in self.chemicals])
         self.chrom_min_rts = np.array([chem.chromatogram.min_rt for chem in self.chemicals]) + chem_rts
         self.chrom_max_rts = np.array([chem.chromatogram.max_rt for chem in self.chemicals]) + chem_rts
+        self.exclusion_list = []  # a list of ExclusionItem
 
 
     def run(self, min_time, max_time, pbar=None):
@@ -161,6 +169,25 @@ class IndependentMassSpectrometer(MassSpectrometer):
                 precursor = param.get(ScanParameters.PRECURSOR)
                 if scan.ms_level >= 2 and precursor is not None and scan.num_peaks > 0:
                     self.precursor_information[precursor].append(scan)
+
+                # update dynamic exclusion list to prevent the same precursor ion being fragmented multiple times in
+                # the same mz and rt window
+                mz = param.get(ScanParameters.MZ_ION)
+                if mz:
+                    mz_tol = param.get(ScanParameters.DYNAMIC_EXCLUSION_MZ_TOL)
+                    rt_tol = param.get(ScanParameters.DYNAMIC_EXCLUSION_RT_TOL)
+                    mz_lower = mz * (1 - mz_tol / 1e6)
+                    mz_upper = mz * (1 + mz_tol / 1e6)
+                    rt_lower = self.time
+                    rt_upper = self.time + rt_tol
+                    x = ExclusionItem(from_mz=mz_lower, to_mz=mz_upper, from_rt=rt_lower, to_rt=rt_upper)
+                    self.logger.debug('Dynamic exclusion from_mz {:.4f} to_mz {:.4f} from_rt {:.2f} to_rt {:.2f}'.format(
+                        x.from_mz, x.to_mz, x.from_rt, x.to_rt
+                    ))
+                    self.exclusion_list.append(x)
+
+                # remove expired items from dynamic exclusion list
+                self.exclusion_list = list(filter(lambda x: x.to_rt > self.time, self.exclusion_list))
 
                 # print a progress bar if provided
                 if pbar is not None:
@@ -196,6 +223,15 @@ class IndependentMassSpectrometer(MassSpectrometer):
             self.clear(key)
         self.time = 0 # reset internal time and index to 0
         self.idx = 0
+
+    def exclude(self, mz, rt):  # TODO: make this faster?
+        for x in self.exclusion_list:
+            exclude_mz = x.from_mz < mz < x.to_mz
+            exclude_rt = x.from_rt < rt < x.to_rt
+            if exclude_mz and exclude_rt:
+                self.logger.debug('Excluded precursor ion mz {:.4f} rt {:.2f}'.format(mz, rt))
+                return True
+        return False
 
     def _get_scan(self, scan_time, param):
         """
