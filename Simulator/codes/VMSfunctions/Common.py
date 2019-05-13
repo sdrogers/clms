@@ -16,6 +16,8 @@ SCAN_DURATION = 'scan_duration'
 POSITIVE = 'positive'
 NEGATIVE = 'negative'
 DEFAULT_MS1_SCAN_WINDOW = (0, 1e3)
+CHEM_DATA = 'data'
+CHEM_NOISE = 'noise'
 
 PROTON_MASS = 1.00727645199076
 
@@ -27,6 +29,7 @@ def save_obj(obj, filename):
     :param filename: the output file
     :return: None
     """
+    print('Saving %s to %s' % (type(obj), filename))
     try:
         with gzip.GzipFile(filename, 'w') as f:
             pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)

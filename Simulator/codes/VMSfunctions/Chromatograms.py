@@ -134,9 +134,9 @@ class FunctionalChromatogram(Chromatogram):
 
 
 class ChromatogramCreator(LoggerMixin):
-    def __init__(self, xcms_output, correction_func=None):
+    def __init__(self, xcms_output):
         # load the chromatograms and sort by intensity ascending
-        chromatograms, chemicals = self._load_chromatograms(xcms_output, correction_func)
+        chromatograms, chemicals = self._load_chromatograms(xcms_output)
         max_intensities = np.array([max(c.raw_intensities) for c in chromatograms])
         idx = np.argsort(max_intensities)
         self.chromatograms = chromatograms[idx]
@@ -155,7 +155,7 @@ class ChromatogramCreator(LoggerMixin):
             selected = takeClosest(self.max_intensities, intensity)
         return self.chromatograms[selected]
 
-    def _load_chromatograms(self, xcms_output, correction_func):
+    def _load_chromatograms(self, xcms_output):
         """
         Load CSV file of chromatogram information exported by the XCMS script 'process_data.R'
         :param df_file: the input csv file exported by the script (in gzip format)
@@ -168,13 +168,13 @@ class ChromatogramCreator(LoggerMixin):
         chems = []
         for i in range(len(peak_ids)):
             if i % 5000 == 0:
-                self.logger.info('Loading {} chromatograms'.format(i))
+                self.logger.debug('Loading {} chromatograms'.format(i))
 
             # raise numpy warning as exception, see https://stackoverflow.com/questions/15933741/how-do-i-catch-a-numpy-warning-like-its-an-exception-not-just-for-testing
             with np.errstate(divide='raise'):
                 try:
                     pid = peak_ids[i]
-                    chrom, chem = self._get_xcms_chromatograms(groups, pid, correction_func)
+                    chrom, chem = self._get_xcms_chromatograms(groups, pid)
                     if len(chrom.rts) > 1:  # chromatograms should have more than one single data point
                         chroms.append(chrom)
                         chems.append(chem)
@@ -183,9 +183,10 @@ class ChromatogramCreator(LoggerMixin):
                 except ZeroDivisionError:
                     self.logger.debug('Invalid chromatogram {}'.format(i))
 
+        self.logger.info('Created {} chromatograms'.format(i))
         return np.array(chroms), np.array(chems)
 
-    def _get_xcms_chromatograms(self, groups, pid, correction_func):
+    def _get_xcms_chromatograms(self, groups, pid):
         selected = groups.get_group(pid)
         mz = self._get_value(selected, 'mz')
         rt = self._get_value(selected, 'rt')
@@ -195,9 +196,11 @@ class ChromatogramCreator(LoggerMixin):
         intensities = self._get_values(selected, 'intensity_values')
         assert len(rts) == len(mzs)
         assert len(rts) == len(intensities)
-        if correction_func is not None:
-            mz, mzs = correction_func(mz, mzs)
         chrom = EmpiricalChromatogram(rts, mzs, intensities)
+
+        # TODO: this only works for positive mode data
+        # Correct the positively charged ions by substracting the mass of a proton
+        mz = mz - PROTON_MASS
         chem = UnknownChemical(mz, rt, max_intensity, chrom, None)
         return chrom, chem
 

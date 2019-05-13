@@ -232,8 +232,9 @@ class ChemicalCreator(LoggerMixin):
             chem = self._get_chemical(1, formula, chrom, sampled_peaks[i])
             if ms_levels > 1:
                 chem.children = self._get_children(1, chem)
+            chem.type = CHEM_DATA
             chemicals.append(chem)
-            if (i/25 == math.floor(i/25)):
+            if i % 25 == 0:
                 self.logger.debug("i = {}".format(i))
         return chemicals        
         
@@ -258,10 +259,12 @@ class ChemicalCreator(LoggerMixin):
                 # In the MassSpec, we assume that chemical starts eluting from chem.rt + chem.chromatogram.rts (normalised to start from 0)
                 # So here, we have to set set chemical rt to start from the minimum of chromatogram raw rts, so it elutes correct.
                 chem.rt = min(chem.chromatogram.raw_rts)
+                chem.type = CHEM_DATA
                 chem.children = self._get_children(1, chem)
                 chemicals.append(chem)
                 if i % 2500 == 0:
                     self.logger.debug("i = {}".format(i))
+        self.logger.info('Created %d chemicals' % len(chemicals))
         return chemicals
     
     def _sample_formulae(self, sampled_peaks):

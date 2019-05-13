@@ -1,6 +1,7 @@
 import math
 
 import numpy as np
+import pylab as plt
 
 from VMSfunctions.Chemicals import ChemicalCreator, UnknownChemical
 from VMSfunctions.Common import *
@@ -86,4 +87,14 @@ class RoiToChemicalCreator(ChemicalCreator):
 
         max_intensity = chrom.raw_intensities[idx]
         chem = UnknownChemical(mz, rt, max_intensity, chrom, None)
+        chem.type = CHEM_NOISE
         return chem
+
+    def plot_chems(self, n_plots, reverse=False):
+        sorted_chems = sorted(self.chemicals, key=lambda chem: chem.chromatogram.roi.num_scans())
+        if reverse:
+            sorted_chems.reverse()
+        for c in sorted_chems[0:n_plots]:
+            chrom = c.chromatogram
+            plt.plot(chrom.raw_rts, chrom.raw_intensities)
+            plt.show()

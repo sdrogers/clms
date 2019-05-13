@@ -92,8 +92,8 @@ class DataSource(LoggerMixin):
         # A dictionary that stores the actual pymzml spectra for each filename
         self.file_spectra = {} # key: filename, value: a dict where key is scan_number and value is spectrum
 
-        # A dictionary to store the distribution on scan durations for each ms_level
-        self.scan_durations = defaultdict(list)
+        # A dictionary to store the distribution on scan durations for each ms_level in each file
+        self.file_scan_durations = {} # key: filename, value: a dict with key ms level and value scan durations
 
         # A dictionary to stores region of interests
         self.all_rois = {}
@@ -105,7 +105,7 @@ class DataSource(LoggerMixin):
         self.ms1_precision = 5e-6
         self.obo_version = '4.0.1'
 
-    def load_data(self, mzml_path):
+    def load_data(self, mzml_path, file_name=None):
         """
         Loads data and generate peaks from mzML files. The resulting peak objects will not have chromatographic peak
         shapes, because no peak picking has been performed yet.
@@ -115,11 +115,10 @@ class DataSource(LoggerMixin):
         file_scan_durations = {} # key: filename, value: a dict where key is ms level and value is scan durations
         file_spectra = {} # key: filename, value: a dict where key is scan_number and value is spectrum
         for filename in glob.glob(os.path.join(mzml_path, '*.mzML')):
-            run = pymzml.run.Reader(filename, obo_version=self.obo_version,
-                                    MS1_Precision=self.ms1_precision,
-                                    extraAccessions=[('MS:1000016', ['value', 'unitName'])])
-
             fname = os.path.basename(filename)
+            if file_name is not None and fname != file_name:
+                continue
+
             self.logger.info('Loading %s' % fname)
             file_spectra[fname] = {}
             file_scan_durations[fname] = {
@@ -127,6 +126,10 @@ class DataSource(LoggerMixin):
                 2: []
             }
             start_time = 0
+
+            run = pymzml.run.Reader(filename, obo_version=self.obo_version,
+                                    MS1_Precision=self.ms1_precision,
+                                    extraAccessions=[('MS:1000016', ['value', 'unitName'])])
             for scan_number, spectrum in enumerate(run):
                 file_spectra[fname][scan_number] = spectrum
 
@@ -143,6 +146,15 @@ class DataSource(LoggerMixin):
 
         self.file_scan_durations = file_scan_durations
         self.file_spectra = file_spectra
+
+    def plot_data(self, file_name, ms_level=1, min_rt=None, max_rt=None, max_data=100000):
+        data_types = [MZ, INTENSITY, RT, N_PEAKS, SCAN_DURATION]
+        for data_type in data_types:
+            X = self.get_data(data_type, file_name, ms_level, min_rt=min_rt, max_rt=max_rt, max_data=max_data)
+            if data_type == INTENSITY:
+                X = np.log(X)
+            self.plot_histogram(X, data_type)
+            self.plot_boxplot(X, data_type)
 
     def plot_histogram(self, X, data_type, bins=100):
         """
