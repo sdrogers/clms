@@ -1,6 +1,8 @@
 import collections
 import gzip
 import logging
+import os
+import pathlib
 import pickle
 from bisect import bisect_left
 
@@ -22,6 +24,12 @@ CHEM_NOISE = 'noise'
 PROTON_MASS = 1.00727645199076
 
 
+def create_if_not_exist(out_dir):
+    if not os.path.exists(out_dir):
+        print('Created %s' % out_dir)
+        pathlib.Path(out_dir).mkdir(parents=True, exist_ok=True)
+
+
 def save_obj(obj, filename):
     """
     Save object to file
@@ -29,6 +37,9 @@ def save_obj(obj, filename):
     :param filename: the output file
     :return: None
     """
+    out_dir = os.path.dirname(filename)
+    create_if_not_exist(out_dir)
+
     print('Saving %s to %s' % (type(obj), filename))
     try:
         with gzip.GzipFile(filename, 'w') as f:

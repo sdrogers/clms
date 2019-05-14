@@ -41,10 +41,7 @@ def run_serial_experiment(param, i, total):
 def get_params(experiment_name, Ns, rt_tols, mz_tol, isolation_window, ionisation_mode, data, density,
                min_ms1_intensity, min_rt, max_rt,
                out_dir, pbar):
-    # create out_dir if it does not exist
-    if not os.path.exists(out_dir):
-        print('Created %s' % out_dir)
-        pathlib.Path(out_dir).mkdir(parents=True, exist_ok=True)
+    create_if_not_exist(out_dir)
 
     print('N =', Ns)
     print('rt_tol =', rt_tols)
