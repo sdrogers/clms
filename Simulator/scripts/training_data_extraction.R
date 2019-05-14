@@ -69,7 +69,31 @@ get_region_of_interest <- function(object, ppm = 25, peakwidth = c(20, 50), snth
 
 #### end ####
 
-mzml_dir <- 'C:\\Users\\joewa\\University of Glasgow\\Vinny Davies - CLDS Metabolomics Project\\Data\\multibeers_urine_data\\beers\\fullscan'
+# # # Perform ROI picking for the beer data
+# mzml_dir <- 'C:\\Users\\joewa\\University of Glasgow\\Vinny Davies - CLDS Metabolomics Project\\Data\\multibeers_urine_data\\beers\\fullscan'
+# mzml_files <- list.files(path=mzml_dir, pattern='*.mzML', full.names=TRUE)
+# design <- getDesign(mzml_files, "group1")
+# 
+# # mzml_files = mzml_files[1]
+# # design <- getDesign(mzml_files, "group1")
+# 
+# # ppm value is set fairly large.
+# # Other parameters for peakwidth, snthresh, prefilter for justin's data, taken from 
+# # https://www.dropbox.com/home/Meta_clustering/ms2lda/large_study/r/beer_method_3_pos?preview=xcmsPeakPicking.R
+# ppm = 10
+# peakwidth = c(5, 100)
+# snthresh = 3
+# prefilter = c(3, 1000)
+# mzdiff = 0.001
+
+# outfile <- 'C:\\Users\\joewa\\University of Glasgow\\Vinny Davies - CLDS Metabolomics Project\\Data\\multibeers_urine_data\\beers\\fullscan\\rois.csv'
+# raw_data <- readData(mzml_files, design, mode='onDisk')
+# pos_df = get_regions_of_interest(raw_data, ppm=ppm, peakwidth=peakwidth, snthresh=snthresh, prefilter=prefilter, mzdiff=mzdiff)
+# pos_df$mode = rep('Positive', nrow(pos_df))
+# write_csv(pos_df, outfile)
+
+# # Perform ROI picking for the urine data
+mzml_dir <- 'C:\\Users\\joewa\\University of Glasgow\\Vinny Davies - CLDS Metabolomics Project\\Data\\multibeers_urine_data\\urines\\fullscan'
 mzml_files <- list.files(path=mzml_dir, pattern='*.mzML', full.names=TRUE)
 design <- getDesign(mzml_files, "group1")
 
@@ -85,8 +109,7 @@ snthresh = 3
 prefilter = c(3, 1000)
 mzdiff = 0.001
 
-# Perform ROI picking
-outfile <- 'C:\\Users\\joewa\\University of Glasgow\\Vinny Davies - CLDS Metabolomics Project\\Data\\multibeers_urine_data\\beers\\fullscan\\rois.csv'
+outfile <- 'C:\\Users\\joewa\\University of Glasgow\\Vinny Davies - CLDS Metabolomics Project\\Data\\multibeers_urine_data\\urines\\fullscan\\rois.csv'
 raw_data <- readData(mzml_files, design, mode='onDisk')
 pos_df = get_regions_of_interest(raw_data, ppm=ppm, peakwidth=peakwidth, snthresh=snthresh, prefilter=prefilter, mzdiff=mzdiff)
 pos_df$mode = rep('Positive', nrow(pos_df))
