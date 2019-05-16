@@ -6,8 +6,6 @@ import pathlib
 import pickle
 from bisect import bisect_left
 
-from sklearn.externals import joblib
-
 # some useful constants
 MZ = 'mz'
 INTENSITY = 'intensity'
@@ -39,15 +37,9 @@ def save_obj(obj, filename):
     """
     out_dir = os.path.dirname(filename)
     create_if_not_exist(out_dir)
-
     print('Saving %s to %s' % (type(obj), filename))
-    try:
-        with gzip.GzipFile(filename, 'w') as f:
-            pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
-    except OSError:
-        logging.getLogger().warning('Old, invalid or missing pickle in %s. Please regenerate this file.' % filename)
-        with open(filename, 'wb') as f:
-            joblib.dump(obj, f, compress=3)
+    with gzip.GzipFile(filename, 'w') as f:
+        pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def load_obj(filename):
@@ -61,8 +53,6 @@ def load_obj(filename):
             return pickle.load(f)
     except OSError:
         logging.getLogger().warning('Old, invalid or missing pickle in %s. Please regenerate this file.' % filename)
-        with open(filename, 'rb') as f:
-            return joblib.load(f)
 
 
 def chromatogramDensityNormalisation(rts, intensities):

@@ -8,6 +8,8 @@ import numpy as np
 import pymzml
 from scipy.stats import pearsonr
 
+from VMSfunctions.Chromatograms import EmpiricalChromatogram
+
 PROTON_MASS = 1.00727645199076
 
 POS_TRANSFORMATIONS = collections.OrderedDict()
@@ -54,10 +56,19 @@ class Roi(object):
         self.n += 1
 
     def __lt__(self, other):
-        # if type(other) == 'Roi':
         return self.get_mean_mz() <= other.get_mean_mz()
-    # else:
-    # return self.get_mean_mz() <= other
+
+    def to_chromatogram(self):
+        if self.n == 0 or self.n == 1: # TODO: deal with n = 1 properly
+            return None
+        chrom = EmpiricalChromatogram(np.array(self.rt_list), np.array(self.mz_list), np.array(self.intensity_list))
+        return chrom
+
+    def __repr__(self):
+        return 'ROI with data points=%d mz (%.4f-%.4f) rt (%.4f-%.4f)' % (
+            self.n,
+            self.mz_list[0], self.mz_list[-1],
+            self.rt_list[0], self.rt_list[-1])
 
 
 # Find the RoI that a particular mz falls into
@@ -161,7 +172,8 @@ def make_roi(input_file, mz_tol=0.001, mz_units='Da', min_length=10, min_intensi
         # print spectrum['centroid_peaks']
         if spectrum['ms level'] == 1:
             live_roi.sort()
-            current_ms1_scan_rt, units = spectrum['scan start time']
+            # current_ms1_scan_rt, units = spectrum['scan start time'] # this no longer works
+            current_ms1_scan_rt, units = spectrum.scan_time
             if units == 'minute':
                 current_ms1_scan_rt *= 60.0
 
@@ -173,7 +185,7 @@ def make_roi(input_file, mz_tol=0.001, mz_units='Da', min_length=10, min_intensi
             # print current_ms1_scan_rt
             # print spectrum.peaks
             not_grew = set(live_roi)
-            for mz, intensity in spectrum.peaks:
+            for mz, intensity in spectrum.peaks('raw'):
                 if intensity >= min_intensity:
                     match_roi = match(Roi(mz, 0, 0), live_roi, mz_tol, mz_units=mz_units)
                     if match_roi:

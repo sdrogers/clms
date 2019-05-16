@@ -244,6 +244,15 @@ class ChemicalCreator(LoggerMixin):
         return chemicals
 
     def sample_from_chromatograms(self, chromatogram_creator, min_rt, max_rt, min_ms1_intensity, ms_levels=2):
+        """
+        Turns empirical chromatograms (exported from XCMS) to Chemicals.
+        :param chromatogram_creator:
+        :param min_rt:
+        :param max_rt:
+        :param min_ms1_intensity:
+        :param ms_levels:
+        :return:
+        """
         self.ms_levels = ms_levels
         self.min_rt = min_rt
         self.max_rt = max_rt
@@ -285,41 +294,41 @@ class ChemicalCreator(LoggerMixin):
             formula_list.append(compound_list[takeClosest(compound_mass_list, mz_peak_sample)].chemical_formula)
         return formula_list
 
-    def _get_children(self, parent_ms_level, parent):  # TODO: this should be moved to the mass spec class
+    def _get_children(self, parent_ms_level, parent, n_peaks=None):  # TODO: this should be moved to the mass spec class
         children_ms_level = parent_ms_level + 1
-        n_peaks = self._get_n(children_ms_level)
-        if n_peaks == None:
-            return None
-        else:
-            kids = []
-            kids_intensity_proportions = self._get_msn_proportions(children_ms_level, n_peaks)
-            if self.alpha < math.inf:
-                for index_children in range(n_peaks):
-                    next_crp, self.counts[children_ms_level - 1] = Restricted_Crp(self.alpha,
-                                                                                  self.counts[children_ms_level - 1],
-                                                                                  self.crp_index[children_ms_level - 1],
-                                                                                  index_children)
-                    self.crp_index[children_ms_level - 1].append(next_crp)
-                    if next_crp == max(self.crp_index[children_ms_level - 1]):
-                        kid = self._get_unknown_msn(children_ms_level, None, None, parent)
-                        kid.prop_ms2_mass = kids_intensity_proportions[index_children]
-                        if children_ms_level < self.ms_levels:
-                            kid.children = self._get_children(children_ms_level, kid)
-                        self.crp_samples[children_ms_level - 1].append(kid)
-                    else:
-                        kid = copy.deepcopy(self.crp_samples[children_ms_level - 1][next_crp])
-                        kid.parent_mass_prop = self._get_parent_mass_prop(children_ms_level)
-                        kid.parent = parent
-                    kids.append(kid)
-                self.crp_samples[children_ms_level - 1].extend(kids)
-            else:
-                for index_children in range(n_peaks):
+        if n_peaks is None:
+            n_peaks = self._get_n(children_ms_level)
+        kids = []
+        kids_intensity_proportions = self._get_msn_proportions(children_ms_level, n_peaks)
+        if self.alpha < math.inf:
+            # draws from here if using Chinese Restaurant Process (SLOW!!!)
+            for index_children in range(n_peaks):
+                next_crp, self.counts[children_ms_level - 1] = Restricted_Crp(self.alpha,
+                                                                              self.counts[children_ms_level - 1],
+                                                                              self.crp_index[children_ms_level - 1],
+                                                                              index_children)
+                self.crp_index[children_ms_level - 1].append(next_crp)
+                if next_crp == max(self.crp_index[children_ms_level - 1]):
                     kid = self._get_unknown_msn(children_ms_level, None, None, parent)
                     kid.prop_ms2_mass = kids_intensity_proportions[index_children]
                     if children_ms_level < self.ms_levels:
                         kid.children = self._get_children(children_ms_level, kid)
-                    kids.append(kid)
-            return kids
+                    self.crp_samples[children_ms_level - 1].append(kid)
+                else:
+                    kid = copy.deepcopy(self.crp_samples[children_ms_level - 1][next_crp])
+                    kid.parent_mass_prop = self._get_parent_mass_prop(children_ms_level)
+                    kid.parent = parent
+                kids.append(kid)
+            self.crp_samples[children_ms_level - 1].extend(kids)
+        else:
+            # Draws from here if children all independent
+            for index_children in range(n_peaks):
+                kid = self._get_unknown_msn(children_ms_level, None, None, parent)
+                kid.prop_ms2_mass = kids_intensity_proportions[index_children]
+                if children_ms_level < self.ms_levels:
+                    kid.children = self._get_children(children_ms_level, kid)
+                kids.append(kid)
+        return kids
 
     def _get_msn_proportions(self, children_ms_level, n_peaks):
         if children_ms_level == 2:

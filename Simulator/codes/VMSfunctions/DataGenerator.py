@@ -10,6 +10,7 @@ from sklearn.neighbors import KernelDensity
 
 from VMSfunctions.Chromatograms import EmpiricalChromatogram
 from VMSfunctions.Common import *
+from VMSfunctions.Roi import *
 
 
 class Peak(object):
@@ -37,46 +38,6 @@ class Peak(object):
                self.ms_level == other.ms_level
 
 
-class RegionOfInterest(object):
-    def __init__(self, file_name, mode, pickedPeak, mzrange, rtrange, scrange):
-        self.file_name = file_name
-        self.mode = mode
-        self.pickedPeak = pickedPeak
-        self.mzrange = mzrange
-        self.rtrange = rtrange
-        self.scrange = scrange
-        self.peaks = []
-
-    def add(self, p):
-        if (self.mzrange[0] <= p.mz <= self.mzrange[1]) and (self.rtrange[0] <= p.rt <= self.rtrange[1]):
-            self.peaks.append(p)
-
-    def num_scans(self):
-        return self.scrange[1] - self.scrange[0] + 1
-
-    def mzs(self):
-        return np.array([p.mz for p in self.peaks])
-
-    def rts(self):
-        return np.array([p.rt for p in self.peaks])
-
-    def intensities(self):
-        return np.array([p.intensity for p in self.peaks])
-
-    def to_chromatogram(self):
-        if len(self.peaks) == 0 or len(self.peaks) == 1:
-            return None
-        chrom = EmpiricalChromatogram(self.rts(), self.mzs(), self.intensities(), roi=self)
-        return chrom
-
-    def __repr__(self):
-        return 'ROI %s %s picked %s mz (%.4f-%.4f) rt (%.4f-%.4f) scans (%d-%d)' % (
-            self.file_name, self.mode, self.pickedPeak,
-            self.mzrange[0], self.mzrange[1],
-            self.rtrange[0], self.rtrange[1],
-            self.scrange[0], self.scrange[1])
-
-
 class DataSource(LoggerMixin):
     """
     A class to load and extract centroided peaks from CSV and mzML files.
@@ -92,12 +53,6 @@ class DataSource(LoggerMixin):
 
         # A dictionary to store the distribution on scan durations for each ms_level in each file
         self.file_scan_durations = {}  # key: filename, value: a dict with key ms level and value scan durations
-
-        # A dictionary to stores region of interests
-        self.all_rois = {}
-
-        # Dataframe of exported ROI information
-        self.roi_df = None
 
         # pymzml parameters
         self.ms1_precision = 5e-6
@@ -273,92 +228,6 @@ class DataSource(LoggerMixin):
         values = list(map(lambda item: item[1], temp))
         return values
 
-    def extract_roi(self, roi_file, min_rt=None, max_rt=None, filename=None):
-        self.roi_df = pd.read_csv(roi_file)
-        if filename is None:
-            roi_filenames = self.roi_df['file'].unique()
-        else:
-            roi_filenames = np.array([filename])
-
-        # convert each row in the dataframe to a ROI object
-        for fname in roi_filenames:
-            self.logger.info('Creating ROI objects for %s' % fname)
-            rois_data = {
-                'rois': [],
-                'mzmin': [],
-                'mzmax': [],
-                'rtmin': [],
-                'rtmax': []
-            }
-
-            # convert each row of the dataframe to roi objects
-            df = self.roi_df[self.roi_df['file'] == fname]
-            for idx, row in df.iterrows():  # TODO: make this faster
-                if (idx % 10000 == 0):
-                    self.logger.debug('%6d/%6d' % (len(rois_data['rois']), df.shape[0]))
-                file_name = row['file']
-                mzmin = row['mzmin']
-                mzmax = row['mzmax']
-                rtmin = row['rtmin']
-                rtmax = row['rtmax']
-                scmin = row['scmin']
-                scmax = row['scmax']
-                pickedPeak = row['pickedPeak']
-                mode = row['mode']
-                roi = RegionOfInterest(file_name, mode, pickedPeak, (mzmin, mzmax), (rtmin, rtmax), (scmin, scmax))
-                if self._valid_roi(roi, min_rt, max_rt):
-                    rois_data['rois'].append(roi)
-                    rois_data['mzmin'].append(mzmin)
-                    rois_data['mzmax'].append(mzmax)
-                    rois_data['rtmin'].append(rtmin)
-                    rois_data['rtmax'].append(rtmax)
-
-            # convert all values to numpy arrays
-            rois_data['rois'] = np.array(rois_data['rois'])
-            rois_data['mzmin'] = np.array(rois_data['mzmin'])
-            rois_data['mzmax'] = np.array(rois_data['mzmax'])
-            rois_data['rtmin'] = np.array(rois_data['rtmin'])
-            rois_data['rtmax'] = np.array(rois_data['rtmax'])
-            self.all_rois[fname] = rois_data
-            self.logger.info('Extracted %d ROIs for %s' % (len(rois_data['rois']), fname))
-
-    def _valid_roi(self, roi, min_rt=None, max_rt=None):
-        if min_rt is not None and roi.rtrange[0] < min_rt:
-            return False
-        if max_rt is not None and roi.rtrange[1] > max_rt:
-            return False
-        return True
-
-    def populate_roi(self, filename=None):
-        if filename is None:
-            roi_filenames = self.roi_df['file'].unique()
-        else:
-            roi_filenames = np.array([filename])
-
-        # assign raw spectrum peaks to ROI
-        for fname in roi_filenames:
-            rois_data = self.all_rois[fname]
-            self.logger.info('Populating ROI objects for %s' % fname)
-
-            # get spectra for a file
-            spectra = self.file_spectra[fname]
-            for scan_id, spectrum in spectra.items():  # loop over all scans
-                if scan_id % 100 == 0:
-                    self.logger.debug('%6d/%6d processing spectrum %s' % (scan_id, len(spectra), spectrum))
-                rt = self._get_rt(spectrum)
-                for mz, intensity in spectrum.peaks('raw'):
-                    # find the ROIs that contain this spectrum peak
-                    p = Peak(mz, rt, intensity, spectrum.ms_level)
-                    rois = self._get_containing_rois(p, rois_data)
-                    for roi in rois:  # if found, assign peaks to ROIs
-                        roi.add(p)
-
-    def save_roi(self, out_file):
-        save_obj(self.all_rois, out_file)
-
-    def load_roi(self, in_file):
-        self.all_rois = load_obj(in_file)
-
     def _get_rt(self, spectrum):
         rt, units = spectrum.scan_time
         if units == 'minute':
@@ -374,15 +243,6 @@ class DataSource(LoggerMixin):
             return False
         else:
             return True
-
-    def _get_containing_rois(self, peak, rois_data):
-        mzmin_check = rois_data['mzmin'] <= peak.mz
-        mzmax_check = peak.mz <= rois_data['mzmax']
-        rtmin_check = rois_data['rtmin'] <= peak.rt
-        rtmax_check = peak.rt <= rois_data['rtmax']
-        idx = np.nonzero(mzmin_check & mzmax_check & rtmin_check & rtmax_check)[0]
-        rois = rois_data['rois'][idx]
-        return rois
 
 
 class DensityEstimator(LoggerMixin):

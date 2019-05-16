@@ -1,6 +1,3 @@
-import os
-import pathlib
-
 from VMSfunctions.Controller import *
 
 
@@ -70,9 +67,11 @@ def get_params(experiment_name, Ns, rt_tols, mz_tol, isolation_window, ionisatio
     print('len(params) =', len(params))
     return params
 
+
 def get_key(chem):
     # turn a chem into (mz, rt, intensity) for equal comparison
     return (tuple(chem.isotopes), chem.rt, chem.max_intensity)
+
 
 def get_frag_events(controller, ms_level):
     # get the fragmentation events for all chemicals for an ms level
@@ -82,6 +81,7 @@ def get_frag_events(controller, ms_level):
         key = get_key(frag_event.chem)
         chem_to_frag_events[key].append(frag_event)
     return dict(chem_to_frag_events)
+
 
 def count_frag_events(key, chem_to_frag_events):
     # count how many good and bad fragmentation events for each chemical (key)
@@ -96,6 +96,7 @@ def count_frag_events(key, chem_to_frag_events):
         else:
             bad_count += 1
     return good_count, bad_count
+
 
 def get_chem_frag_counts(chem_list, chem_to_frag_events):
     # get the count of good/bad fragmentation events for all chemicals in chem_list
@@ -113,6 +114,7 @@ def get_chem_frag_counts(chem_list, chem_to_frag_events):
             'bad': bad_count
         }
     return results
+
 
 def compute_performance(controller, dataset):
     ms_level = 2
@@ -132,9 +134,10 @@ def compute_performance(controller, dataset):
 
     prec = tp / (tp + fp)
     rec = tp / (tp + fn)
-    f1 = ( 2 * prec * rec) / (prec + rec)
+    f1 = (2 * prec * rec) / (prec + rec)
     prec, rec, f1
     return tp, fp, fn, prec, rec, f1
+
 
 def load_controller(results_dir, experiment_name, N, rt_tol):
     analysis_name = 'experiment_%s_N_%d_rttol_%d' % (experiment_name, N, rt_tol)
@@ -146,6 +149,7 @@ def load_controller(results_dir, experiment_name, N, rt_tol):
         controller = None
     return controller
 
+
 def load_controllers(results_dir, Ns, rt_tols):
     controllers = []
     for N in Ns:
@@ -154,6 +158,7 @@ def load_controllers(results_dir, Ns, rt_tols):
             if controller is not None:
                 controllers.append(controller)
     return controllers
+
 
 def make_plot(df, X, Y, title, ylabel):
     df.plot.line(x=X, y=Y)

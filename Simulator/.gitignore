@@ -115,4 +115,3 @@ dmypy.json
 
 # CLMS-specific ignores
 models/*
-Pipfile.lock
