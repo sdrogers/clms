@@ -21,21 +21,24 @@ class EmpiricalChromatogram(Chromatogram):
     Empirical Chromatograms to be used within Chemicals
     """
 
-    def __init__(self, rts, mzs, intensities, roi=None):
+    def __init__(self, rts, mzs, intensities, roi=None, single_point_length=0.05):
         self.raw_rts = rts
         self.raw_mzs = mzs
         self.raw_intensities = intensities
-
         # ensures that all arrays are in sorted order
-        p = rts.argsort()
-        rts = rts[p]
-        mzs = mzs[p]
-        intensities = intensities[p]
-
+        if len(rts) > 1:
+            p = rts.argsort()
+            rts = rts[p]
+            mzs = mzs[p]
+            intensities = intensities[p]
+        else:
+            rts = np.array([rts[0] - 0.5*single_point_length, rts[0] + 0.5*single_point_length])
+            mzs = np.array([mzs, mzs])
+            intensities = np.array([intensities[0],intensities[0]])
         # normalise arrays
         self.rts = rts - min(rts)
         self.mzs = mzs - np.mean(mzs)  # may want to just set this to 0 and remove from input
-        self.intensities = self.raw_intensities / max(self.raw_intensities)
+        self.intensities = intensities / max(intensities)
         # chromatogramDensityNormalisation(rts, intensities)
 
         self.roi = roi
