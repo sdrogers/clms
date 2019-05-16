@@ -21,7 +21,7 @@ class EmpiricalChromatogram(Chromatogram):
     Empirical Chromatograms to be used within Chemicals
     """
 
-    def __init__(self, rts, mzs, intensities, roi=None):
+    def __init__(self, rts, mzs, intensities):
         self.raw_rts = rts
         self.raw_mzs = mzs
         self.raw_intensities = intensities
@@ -38,7 +38,6 @@ class EmpiricalChromatogram(Chromatogram):
         self.intensities = self.raw_intensities / max(self.raw_intensities)
         # chromatogramDensityNormalisation(rts, intensities)
 
-        self.roi = roi
         self.min_rt = min(self.rts)
         self.max_rt = max(self.rts)
 
