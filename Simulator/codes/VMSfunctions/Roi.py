@@ -161,7 +161,8 @@ def make_roi(input_file, mz_tol=0.001, mz_units='Da', min_length=10, min_intensi
         # print spectrum['centroid_peaks']
         if spectrum['ms level'] == 1:
             live_roi.sort()
-            current_ms1_scan_rt, units = spectrum['scan start time']
+            # current_ms1_scan_rt, units = spectrum['scan start time'] # this no longer works
+            current_ms1_scan_rt, units = spectrum.scan_time
             if units == 'minute':
                 current_ms1_scan_rt *= 60.0
 
@@ -173,7 +174,7 @@ def make_roi(input_file, mz_tol=0.001, mz_units='Da', min_length=10, min_intensi
             # print current_ms1_scan_rt
             # print spectrum.peaks
             not_grew = set(live_roi)
-            for mz, intensity in spectrum.peaks:
+            for mz, intensity in spectrum.peaks('raw'):
                 if intensity >= min_intensity:
                     match_roi = match(Roi(mz, 0, 0), live_roi, mz_tol, mz_units=mz_units)
                     if match_roi:
