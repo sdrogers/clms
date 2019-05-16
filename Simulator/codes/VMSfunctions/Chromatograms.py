@@ -33,7 +33,7 @@ class EmpiricalChromatogram(Chromatogram):
             intensities = intensities[p]
         else:
             rts = np.array([rts[0] - 0.5*single_point_length, rts[0] + 0.5*single_point_length])
-            mzs = np.array([mzs, mzs])
+            mzs = np.array([mzs[0], mzs[0]])
             intensities = np.array([intensities[0],intensities[0]])
         # normalise arrays
         self.rts = rts - min(rts)
