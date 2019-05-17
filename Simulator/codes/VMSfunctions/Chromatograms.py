@@ -21,7 +21,7 @@ class EmpiricalChromatogram(Chromatogram):
     Empirical Chromatograms to be used within Chemicals
     """
 
-    def __init__(self, rts, mzs, intensities, single_point_length=0.05):
+    def __init__(self, rts, mzs, intensities, single_point_length=0.1):
         self.raw_rts = rts
         self.raw_mzs = mzs
         self.raw_intensities = intensities
