@@ -43,8 +43,11 @@ def get_df(csv_file, min_ms1_intensity, rt_range, mz_range):
     # add log intensity column
     df['log_intensity'] = df.apply(lambda row: np.log(row[intensity_col]), axis=1)
     # add N column
-    df['N'] = df.apply(lambda row: get_N(row), axis=1)
-    df[['N']] = df[['N']].astype('int')
+    try:
+        df['N'] = df.apply(lambda row: get_N(row), axis=1)
+        df[['N']] = df[['N']].astype('int')
+    except IndexError:
+        pass
     # add group column
     df['group'] = df.apply(lambda row: experiment_group(row), axis=1)
     return df
