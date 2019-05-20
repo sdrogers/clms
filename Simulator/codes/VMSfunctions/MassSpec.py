@@ -13,7 +13,7 @@ from VMSfunctions.DataGenerator import Peak
 
 
 class Scan(object):
-    def __init__(self, scan_id, mzs, intensities, ms_level, rt, density=None, isolation_windows = None):
+    def __init__(self, scan_id, mzs, intensities, ms_level, rt, scan_duration, isolation_windows=None):
         assert len(mzs) == len(intensities)
         self.scan_id = scan_id
 
@@ -26,22 +26,8 @@ class Scan(object):
         self.rt = rt
         self.num_peaks = len(mzs)
 
-        self.density = density
-        self.scan_duration = self._get_scan_duration()
+        self.scan_duration = scan_duration
         self.isolation_windows = isolation_windows
-
-    def filter_intensity(self, min_intensity):
-        keep = self.intensities > min_intensity
-        self.mzs = self.mzs[keep]
-        self.intensities = self.intensities[keep]
-        self.num_peaks = len(self.mzs)
-
-    def _get_scan_duration(self):
-        if self.density is not None:
-            scan_duration = self.density.scan_durations(self.ms_level, 1).flatten()
-            return scan_duration[0]
-        else: # TODO: improve this
-            return 1
 
     def __repr__(self):
         return 'Scan %d num_peaks=%d rt=%.2f ms_level=%d' % (self.scan_id, self.num_peaks, self.rt, self.ms_level)
@@ -51,7 +37,6 @@ class ScanParameters(object):
     MS_LEVEL = 'ms_level'
     ISOLATION_WINDOWS = 'isolation_windows'
     PRECURSOR = 'precursor'
-    MZ_ION = 'mz'
     DYNAMIC_EXCLUSION_MZ_TOL = 'mz_tol'
     DYNAMIC_EXCLUSION_RT_TOL = 'rt_tol'
 
@@ -162,18 +147,30 @@ class IndependentMassSpectrometer(MassSpectrometer):
                 else:
                     # otherwise pop the parameter for the next scan from the queue
                     param = self.queue.pop(0)
+
+                # do one scan and increase time
                 scan = self.get_next_scan(param)
-                # logger.debug('time %f scan %s' % (self.time, scan))
+                self.logger.info('Time %f Generated %s' % (self.time, scan))
 
                 # if MS2 and above, and the controller tells us which precursor ion the scan is coming from, store it
                 precursor = param.get(ScanParameters.PRECURSOR)
                 if scan.ms_level >= 2 and precursor is not None and scan.num_peaks > 0:
+
+                    # update precursor ion information
+                    isolation_windows = param.get(ScanParameters.ISOLATION_WINDOWS)
+                    self.logger.debug('Time {:.6f} Isolated precursor ion {:.4f} at ({:.4f}, {:.4f})'.format(self.time, precursor.precursor_mz, \
+                                                                                                     isolation_windows[
+                                                                                                         0][
+                                                                                                         0][0],
+                                                                                                     isolation_windows[
+                                                                                                         0][
+                                                                                                         0][1]))
                     self.precursor_information[precursor].append(scan)
 
-                # update dynamic exclusion list to prevent the same precursor ion being fragmented multiple times in
-                # the same mz and rt window
-                mz = param.get(ScanParameters.MZ_ION)
-                if mz:
+                    # update dynamic exclusion list to prevent the same precursor ion being fragmented multiple times in
+                    # the same mz and rt window
+                    # Note: at this point, fragmentation has occurred and time has been incremented!
+                    mz = precursor.precursor_mz
                     mz_tol = param.get(ScanParameters.DYNAMIC_EXCLUSION_MZ_TOL)
                     rt_tol = param.get(ScanParameters.DYNAMIC_EXCLUSION_RT_TOL)
                     mz_lower = mz * (1 - mz_tol / 1e6)
@@ -181,7 +178,8 @@ class IndependentMassSpectrometer(MassSpectrometer):
                     rt_lower = self.time
                     rt_upper = self.time + rt_tol
                     x = ExclusionItem(from_mz=mz_lower, to_mz=mz_upper, from_rt=rt_lower, to_rt=rt_upper)
-                    self.logger.debug('Dynamic exclusion from_mz {:.4f} to_mz {:.4f} from_rt {:.2f} to_rt {:.2f}'.format(
+                    self.logger.debug('Time {:.6f} Created dynamic exclusion window mz ({:.4f}-{:.4f}) rt ({:.2f}-{:.2f})'.format(
+                        self.time,
                         x.from_mz, x.to_mz, x.from_rt, x.to_rt
                     ))
                     self.exclusion_list.append(x)
@@ -229,7 +227,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
             exclude_mz = x.from_mz < mz < x.to_mz
             exclude_rt = x.from_rt < rt < x.to_rt
             if exclude_mz and exclude_rt:
-                self.logger.debug('Excluded precursor ion mz {:.4f} rt {:.2f}'.format(mz, rt))
+                self.logger.debug('Time {:.6f} Excluded precursor ion mz {:.4f} rt {:.2f} because of {}'.format(self.time, mz, rt, x))
                 return True
         return False
 
@@ -273,8 +271,12 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
         scan_mzs = np.array(scan_mzs)
         scan_intensities = np.array(scan_intensities)
+
+        # sample a new scan duration for this ms_level
+        scan_duration = self.density.scan_durations(ms_level, 1).flatten()[0]
+
         return Scan(scan_id, scan_mzs, scan_intensities, ms_level, scan_time,
-                    density=self.density, isolation_windows=isolation_windows)
+                    scan_duration, isolation_windows=isolation_windows)
 
     def _get_chem_indices(self, query_rt):
         rtmin_check = self.chrom_min_rts <= query_rt

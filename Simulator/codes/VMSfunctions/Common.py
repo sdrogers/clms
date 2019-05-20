@@ -131,6 +131,7 @@ class LoggerMixin():
         mpl_logger.setLevel(logging.WARNING)
         # initalise basic config for all loggers
         name = "{}".format(type(self).__name__)
-        logging.basicConfig(level=logging.getLogger().level)
+        format = '%(levelname)-7s: %(name)-30s : %(message)s'
+        logging.basicConfig(level=logging.getLogger().level, format=format)
         logger = logging.getLogger(name)
         return logger
