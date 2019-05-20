@@ -224,8 +224,8 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
     def exclude(self, mz, rt):  # TODO: make this faster?
         for x in self.exclusion_list:
-            exclude_mz = x.from_mz < mz < x.to_mz
-            exclude_rt = x.from_rt < rt < x.to_rt
+            exclude_mz = x.from_mz <= mz <= x.to_mz
+            exclude_rt = x.from_rt <= rt <= x.to_rt
             if exclude_mz and exclude_rt:
                 self.logger.debug('Time {:.6f} Excluded precursor ion mz {:.4f} rt {:.2f} because of {}'.format(self.time, mz, rt, x))
                 return True
