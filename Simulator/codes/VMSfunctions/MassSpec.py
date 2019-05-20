@@ -150,7 +150,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
                 # do one scan and increase time
                 scan = self.get_next_scan(param)
-                self.logger.info('Time %f Generated %s' % (self.time, scan))
+                self.logger.info('Time %f Len(queue)=%d' % (self.time, len(self.queue)))
 
                 # if MS2 and above, and the controller tells us which precursor ion the scan is coming from, store it
                 precursor = param.get(ScanParameters.PRECURSOR)
@@ -178,7 +178,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
                     rt_lower = self.time
                     rt_upper = self.time + rt_tol
                     x = ExclusionItem(from_mz=mz_lower, to_mz=mz_upper, from_rt=rt_lower, to_rt=rt_upper)
-                    self.logger.debug('Time {:.6f} Created dynamic exclusion window mz ({:.4f}-{:.4f}) rt ({:.2f}-{:.2f})'.format(
+                    self.logger.debug('Time {:.6f} Created dynamic exclusion window mz ({}-{}) rt ({}-{})'.format(
                         self.time,
                         x.from_mz, x.to_mz, x.from_rt, x.to_rt
                     ))

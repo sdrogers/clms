@@ -35,4 +35,4 @@ mass_spec = IndependentMassSpectrometer(ionisation_mode, data, density=density)
 controller = TopNController(mass_spec, N, isolation_window, mz_tol,
                             rt_tol, min_ms1_intensity)
 controller.run(min_rt, max_rt, pbar)
-# controller.write_mzML('my_analysis', '../experiments/beer1pos_mzml_compare/out.mzML')
+controller.write_mzML('my_analysis', '../experiments/beer1pos_mzml_compare/out.mzML')
