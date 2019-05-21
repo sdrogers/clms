@@ -97,7 +97,8 @@ class DataSource(LoggerMixin):
                 rt = self._get_rt(scan)
                 current_level = scan['ms level']
                 rt_steps = file_scan_durations[fname]
-                rt_steps[(previous_level, current_level)].append(rt - old_rt)
+                previous_duration = rt - old_rt
+                rt_steps[(previous_level, current_level)].append(previous_duration)
                 previous_level = current_level
                 old_rt = rt
 

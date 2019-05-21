@@ -13,7 +13,7 @@ from VMSfunctions.DataGenerator import Peak
 
 
 class Scan(object):
-    def __init__(self, scan_id, mzs, intensities, ms_level, rt, scan_duration, isolation_windows=None):
+    def __init__(self, scan_id, mzs, intensities, ms_level, rt, scan_duration=None, isolation_windows=None):
         assert len(mzs) == len(intensities)
         self.scan_id = scan_id
 
@@ -203,8 +203,24 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
     def get_next_scan(self, param):
         if param is not None:
+            # generate a new scan at self.time
             scan = self._get_scan(self.time, param)
+
+            # notify controller about this scan
+            # the queue will be updated by the controller if necessary
             self.fire_event(self.MS_SCAN_ARRIVED, scan)
+
+            # look into the queue, find out what the next scan ms_level is, and compute the scan duration
+            try:
+                next_scan_param = self.queue[0]
+                next_level = next_scan_param.get(ScanParameters.MS_LEVEL)
+            except IndexError: # if queue is empty, the next one is an MS1 scan by default
+                next_level = 1
+            current_level = scan.ms_level
+            current_scan_duration = self.density.scan_durations(current_level, next_level, 1).flatten()[0]
+            scan.scan_duration = current_scan_duration
+
+            # increase simulator scan index and time
             self.idx += 1
             self.time += scan.scan_duration
             return scan
@@ -276,13 +292,10 @@ class IndependentMassSpectrometer(MassSpectrometer):
         scan_mzs = np.array(scan_mzs)
         scan_intensities = np.array(scan_intensities)
 
-        # sample a new scan duration based on the current and previous ms_levels
-        # the first time this runs, there's no previous level, so we just set it to current level
-        previous_level = self.previous_level if self.previous_level is not None else ms_level
-        scan_duration = self.density.scan_durations(previous_level, ms_level, 1).flatten()[0]
-
+        # Note: at this point, the scan duration is not set yet because we don't know what the next scan is going to be
+        # We will set it later in the get_next_scan() method after we've notified the controller that this scan is produced.
         return Scan(scan_id, scan_mzs, scan_intensities, ms_level, scan_time,
-                    scan_duration, isolation_windows=isolation_windows)
+                    scan_duration=None, isolation_windows=isolation_windows)
 
     def _get_chem_indices(self, query_rt):
         rtmin_check = self.chrom_min_rts <= query_rt
