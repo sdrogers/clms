@@ -127,6 +127,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
         self.precursor_information = defaultdict(list) # key: Precursor object, value: ms2 scans
         self.density = density # a PeakDensityEstimator object
         self.fragmentation_events = [] # which chemicals produce which peaks
+        self.previous_level = None # ms_level of the previous scan
 
         chem_rts = np.array([chem.rt for chem in self.chemicals])
         self.chrom_min_rts = np.array([chem.chromatogram.min_rt for chem in self.chemicals]) + chem_rts
@@ -186,6 +187,9 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
                 # remove expired items from dynamic exclusion list
                 self.exclusion_list = list(filter(lambda x: x.to_rt > self.time, self.exclusion_list))
+
+                # store previous ms_level
+                self.previous_level = scan.ms_level
 
                 # print a progress bar if provided
                 if pbar is not None:
@@ -272,8 +276,10 @@ class IndependentMassSpectrometer(MassSpectrometer):
         scan_mzs = np.array(scan_mzs)
         scan_intensities = np.array(scan_intensities)
 
-        # sample a new scan duration for this ms_level
-        scan_duration = self.density.scan_durations(ms_level, 1).flatten()[0]
+        # sample a new scan duration based on the current and previous ms_levels
+        # the first time this runs, there's no previous level, so we just set it to current level
+        previous_level = self.previous_level if self.previous_level is not None else ms_level
+        scan_duration = self.density.scan_durations(previous_level, ms_level, 1).flatten()[0]
 
         return Scan(scan_id, scan_mzs, scan_intensities, ms_level, scan_time,
                     scan_duration, isolation_windows=isolation_windows)

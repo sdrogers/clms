@@ -1,3 +1,4 @@
+import copy
 import glob
 import os
 
@@ -75,27 +76,30 @@ class DataSource(LoggerMixin):
             self.logger.info('Loading %s' % fname)
             file_spectra[fname] = {}
             file_scan_durations[fname] = {
-                1: [],
-                2: []
+                (1, 1): [],
+                (1, 2): [],
+                (2, 1): [],
+                (2, 2): []
             }
-            start_time = 0
 
             run = pymzml.run.Reader(filename, obo_version=self.obo_version,
                                     MS1_Precision=self.ms1_precision,
                                     extraAccessions=[('MS:1000016', ['value', 'unitName'])])
-            for scan_number, spectrum in enumerate(run):
-                file_spectra[fname][scan_number] = spectrum
+            for scan_no, scan in enumerate(run):
+                # store scans
+                file_spectra[fname][scan_no] = scan
 
-                # get spectrum ms level and retention time
-                ms_level = spectrum.ms_level
-                rt = self._get_rt(spectrum)
-
-                # store the scan duration of each spectrum
-                end_time = rt
-                duration = end_time - start_time
-                item = [start_time, duration]
-                file_scan_durations[fname][ms_level].append(item)
-                start_time = end_time
+                # store scan durations
+                if scan_no == 0:
+                    previous_level = scan['ms level']
+                    old_rt = self._get_rt(scan)
+                    continue
+                rt = self._get_rt(scan)
+                current_level = scan['ms level']
+                rt_steps = file_scan_durations[fname]
+                rt_steps[(previous_level, current_level)].append(rt - old_rt)
+                previous_level = current_level
+                old_rt = rt
 
         self.file_scan_durations = file_scan_durations
         self.file_spectra = file_spectra
@@ -103,24 +107,40 @@ class DataSource(LoggerMixin):
     def plot_data(self, file_name, ms_level=1, min_rt=None, max_rt=None, max_data=100000):
         data_types = [MZ, INTENSITY, RT, N_PEAKS, SCAN_DURATION]
         for data_type in data_types:
-            X = self.get_data(data_type, file_name, ms_level, min_rt=min_rt, max_rt=max_rt, max_data=max_data)
-            if data_type == INTENSITY:
-                X = np.log(X)
-            self.plot_histogram(X, data_type)
-            self.plot_boxplot(X, data_type)
+            if data_type == SCAN_DURATION:
+                X = self.get_scan_durations(file_name)
+                self.plot_histogram(X, data_type)
+            else:
+                X = self.get_data(data_type, file_name, ms_level, min_rt=min_rt, max_rt=max_rt, max_data=max_data)
+                if data_type == INTENSITY:
+                    X = np.log(X)
+                self.plot_histogram(X, data_type)
+                self.plot_boxplot(X, data_type)
 
-    def plot_histogram(self, X, data_type, bins=100):
+    def plot_histogram(self, X, data_type, n_bins=100):
         """
         Makes a histogram plot on the distribution of the item of interest
         :param X: a numpy array
         :param bins: number of histogram bins
         :return: nothing. A plot is shown.
         """
-        plt.figure()
-        _ = plt.hist(X, bins=bins)
-        plt.plot(X[:, 0], np.full(X.shape[0], -0.01), '|k')
-        plt.title('Histogram for %s -- shape %s' % (data_type, str(X.shape)))
-        plt.show()
+        if data_type == SCAN_DURATION:
+            rt_steps = X
+            for key, rt_list in rt_steps.items():
+                try:
+                    bins = np.linspace(min(rt_list), max(rt_list), n_bins)
+                    plt.figure()
+                    plt.hist(rt_list, bins=bins)
+                    plt.title(key)
+                    plt.show()
+                except ValueError:
+                    continue
+        else:
+            plt.figure()
+            _ = plt.hist(X, bins=n_bins)
+            plt.plot(X[:, 0], np.full(X.shape[0], -0.01), '|k')
+            plt.title('Histogram for %s -- shape %s' % (data_type, str(X.shape)))
+            plt.show()
 
     def plot_boxplot(self, X, data_type):
         """
@@ -151,50 +171,41 @@ class DataSource(LoggerMixin):
         :param log: if true, the returned values will be logged
         :return: an Nx1 numpy array of all the values requested
         """
-        if data_type == SCAN_DURATION:
-            if filename is None:  # use the scan durations from all files
-                values = []
-                for f in self.file_scan_durations:
-                    temp = self._get_filtered_scan_durations(f, ms_level, min_rt, max_rt)
-                    values.extend(temp)
-            else:  # use the scan durations from that file only
-                values = self._get_filtered_scan_durations(filename, ms_level, min_rt, max_rt)
-        else:
-            # get spectra from either one file or all files
-            if filename is None:  # use all spectra
-                all_spectra = []
-                for f in self.file_spectra:
-                    spectra_for_f = list(self.file_spectra[f].values())
-                    all_spectra.extend(spectra_for_f)
-            else:  # use spectra for that file only
-                all_spectra = self.file_spectra[filename].values()
+        # get spectra from either one file or all files
+        if filename is None:  # use all spectra
+            all_spectra = []
+            for f in self.file_spectra:
+                spectra_for_f = list(self.file_spectra[f].values())
+                all_spectra.extend(spectra_for_f)
+        else:  # use spectra for that file only
+            all_spectra = self.file_spectra[filename].values()
 
-            # loop through spectrum and get all peaks above threshold
-            values = []
-            for spectrum in all_spectra:
-                # if wrong ms level, skip this spectrum
-                if spectrum.ms_level != ms_level:
-                    continue
+        # loop through spectrum and get all peaks above threshold
+        values = []
+        for spectrum in all_spectra:
+            # if wrong ms level, skip this spectrum
+            if spectrum.ms_level != ms_level:
+                continue
 
-                # collect all valid Peak objects in a spectrum
-                spectrum_peaks = []
-                for mz, intensity in spectrum.peaks('raw'):
-                    rt = self._get_rt(spectrum)
-                    p = Peak(mz, rt, intensity, spectrum.ms_level)
-                    if self._valid_peak(p, min_intensity, min_rt, max_rt):
-                        spectrum_peaks.append(p)
+            # collect all valid Peak objects in a spectrum
+            spectrum_peaks = []
+            for mz, intensity in spectrum.peaks('raw'):
+                rt = self._get_rt(spectrum)
+                p = Peak(mz, rt, intensity, spectrum.ms_level)
+                if self._valid_peak(p, min_intensity, min_rt, max_rt):
+                    spectrum_peaks.append(p)
 
-                if data_type == N_PEAKS:
-                    n_peaks = len(spectrum_peaks)
-                    if n_peaks > 0:
-                        values.append(n_peaks)
-                elif data_type == MZ_INTENSITY:
-                    mzs = list(getattr(x, MZ) for x in spectrum_peaks)
-                    intensities = list(getattr(x, INTENSITY) for x in spectrum_peaks)
-                    values.extend(list(zip(mzs, intensities)))
-                else:  # MZ, INTENSITY or RT
-                    attrs = list(getattr(x, data_type) for x in spectrum_peaks)
-                    values.extend(attrs)
+            if data_type == N_PEAKS:
+                n_peaks = len(spectrum_peaks)
+                if n_peaks > 0:
+                    values.append(n_peaks)
+            elif data_type == MZ_INTENSITY:
+                mzs = list(getattr(x, MZ) for x in spectrum_peaks)
+                intensities = list(getattr(x, INTENSITY) for x in spectrum_peaks)
+                values.extend(list(zip(mzs, intensities)))
+            else:  # MZ, INTENSITY or RT
+                attrs = list(getattr(x, data_type) for x in spectrum_peaks)
+                values.extend(attrs)
 
         # log-transform if necessary
         X = np.array(values)
@@ -219,14 +230,18 @@ class DataSource(LoggerMixin):
             # convert into Nx1 array
             return sampled_X[:, np.newaxis]
 
-    def _get_filtered_scan_durations(self, filename, ms_level, min_rt, max_rt):
-        temp = self.file_scan_durations[filename][ms_level]
-        if min_rt is not None:
-            temp = filter(lambda item: min_rt < item[0], temp)
-        if max_rt is not None:
-            temp = filter(lambda item: item[0] < max_rt, temp)
-        values = list(map(lambda item: item[1], temp))
-        return values
+    def get_scan_durations(self, fname):
+        if fname is None: # if no filename, then combine all the dictionary keys
+            combined = None
+            for f in self.file_scan_durations:
+                if combined is None: # copy first one
+                    combined = copy.deepcopy(self.file_scan_durations[f])
+                else: # and extend with the subsequent ones
+                    for key in combined:
+                        combined[key].extend(self.file_scan_durations[f][key])
+        else:
+            combined = self.file_scan_durations[fname]
+        return combined
 
     def _get_rt(self, spectrum):
         rt, units = spectrum.scan_time
@@ -256,6 +271,7 @@ class DensityEstimator(LoggerMixin):
         self.min_rt = min_rt
         self.max_rt = max_rt
         self.plot = plot
+        self.file_scan_durations = None
 
     def kde(self, data_source, filename, ms_level, bandwidth_mz=1.0, bandwidth_intensity=0.01,
             bandwidth_rt=5.0, bandwidth_n_peaks=1.0, bandwidth_scan_durations=0.01, max_data=100000):
@@ -264,8 +280,12 @@ class DensityEstimator(LoggerMixin):
             {'data_type': INTENSITY, 'bandwidth': bandwidth_intensity},
             {'data_type': RT, 'bandwidth': bandwidth_rt},
             {'data_type': N_PEAKS, 'bandwidth': bandwidth_n_peaks},
-            {'data_type': SCAN_DURATION, 'bandwidth': bandwidth_scan_durations},
         ]
+
+        # not really kde, but we store it anyway for sampling later
+        self.file_scan_durations = data_source.get_scan_durations(filename)
+
+        # run kdes
         for param in params:
             data_type = param['data_type']
 
@@ -303,8 +323,10 @@ class DensityEstimator(LoggerMixin):
     def n_peaks(self, ms_level, n_sample):
         return self.kdes[(N_PEAKS, ms_level)].sample(n_sample)
 
-    def scan_durations(self, ms_level, n_sample):
-        return self.kdes[(SCAN_DURATION, ms_level)].sample(n_sample)
+    def scan_durations(self, previous_level, current_level, n_sample):
+        key = (previous_level, current_level, )
+        values = self.file_scan_durations[key]
+        return np.random.choice(values, size=n_sample)
 
     def _plot(self, kde, X, data_type, filename, bandwidth):
         if self.plot:
@@ -330,15 +352,19 @@ class PeakDensityEstimator(LoggerMixin):
         self.min_rt = min_rt
         self.max_rt = max_rt
         self.plot = plot
+        self.file_scan_durations = None
 
     def kde(self, data_source, filename, ms_level, bandwidth_mz_intensity=1.0,
             bandwidth_rt=5.0, bandwidth_n_peaks=1.0, bandwidth_scan_durations=0.01, max_data=100000):
         params = [
             {'data_type': MZ_INTENSITY, 'bandwidth': bandwidth_mz_intensity},
             {'data_type': RT, 'bandwidth': bandwidth_rt},
-            {'data_type': N_PEAKS, 'bandwidth': bandwidth_n_peaks},
-            {'data_type': SCAN_DURATION, 'bandwidth': bandwidth_scan_durations},
+            {'data_type': N_PEAKS, 'bandwidth': bandwidth_n_peaks}
         ]
+
+        # not really kde, but we store it anyway for sampling later
+        self.file_scan_durations = data_source.get_scan_durations(filename)
+
         for param in params:
             data_type = param['data_type']
 
@@ -366,8 +392,10 @@ class PeakDensityEstimator(LoggerMixin):
     def n_peaks(self, ms_level, n_sample):
         return self.kdes[(N_PEAKS, ms_level)].sample(n_sample)
 
-    def scan_durations(self, ms_level, n_sample):
-        return self.kdes[(SCAN_DURATION, ms_level)].sample(n_sample)
+    def scan_durations(self, previous_level, current_level, n_sample):
+        key = (previous_level, current_level, )
+        values = self.file_scan_durations[key]
+        return np.random.choice(values, size=n_sample)
 
     def _plot(self, kde, X, data_type, filename, bandwidth):
         if self.plot:
