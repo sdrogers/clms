@@ -56,7 +56,7 @@ class ScanParameters(object):
         return 'ScanParameters %s' % (self.params)
 
 
-class FragmentationEvent(object): # for benchmarking purpose
+class FragmentationEvent(object):  # for benchmarking purpose
     def __init__(self, chem, query_rt, ms_level, peaks, scan_id):
         self.chem = chem
         self.query_rt = query_rt
@@ -77,7 +77,7 @@ class MassSpectrometer(LoggerMixin):
         self.ionisation_mode = ionisation_mode
 
         # following IAPI events
-        self.events =  Events((self.MS_SCAN_ARRIVED, self.ACQUISITION_STREAM_OPENING, self.ACQUISITION_STREAM_CLOSING,))
+        self.events = Events((self.MS_SCAN_ARRIVED, self.ACQUISITION_STREAM_OPENING, self.ACQUISITION_STREAM_CLOSING,))
         self.event_dict = {
             self.MS_SCAN_ARRIVED: self.events.MsScanArrived,
             self.ACQUISITION_STREAM_OPENING: self.events.AcquisitionStreamOpening,
@@ -102,7 +102,7 @@ class MassSpectrometer(LoggerMixin):
         if event_name not in self.event_dict:
             raise ValueError('Unknown event name')
         e = self.event_dict[event_name]
-        e += handler # register a new event handler for e
+        e += handler  # register a new event handler for e
 
     def clear(self, event_name):
         if event_name not in self.event_dict:
@@ -124,16 +124,15 @@ class IndependentMassSpectrometer(MassSpectrometer):
         self.time = 0
         self.queue = []
         self.repeating_scan_parameters = None
-        self.precursor_information = defaultdict(list) # key: Precursor object, value: ms2 scans
-        self.density = density # a PeakDensityEstimator object
-        self.fragmentation_events = [] # which chemicals produce which peaks
-        self.previous_level = None # ms_level of the previous scan
+        self.precursor_information = defaultdict(list)  # key: Precursor object, value: ms2 scans
+        self.density = density  # a PeakDensityEstimator object
+        self.fragmentation_events = []  # which chemicals produce which peaks
+        self.previous_level = None  # ms_level of the previous scan
 
         chem_rts = np.array([chem.rt for chem in self.chemicals])
         self.chrom_min_rts = np.array([chem.chromatogram.min_rt for chem in self.chemicals]) + chem_rts
         self.chrom_max_rts = np.array([chem.chromatogram.max_rt for chem in self.chemicals]) + chem_rts
         self.exclusion_list = []  # a list of ExclusionItem
-
 
     def run(self, min_time, max_time, pbar=None):
         self.time = min_time
@@ -156,16 +155,14 @@ class IndependentMassSpectrometer(MassSpectrometer):
                 # if MS2 and above, and the controller tells us which precursor ion the scan is coming from, store it
                 precursor = param.get(ScanParameters.PRECURSOR)
                 if scan.ms_level >= 2 and precursor is not None and scan.num_peaks > 0:
-
                     # update precursor ion information
                     isolation_windows = param.get(ScanParameters.ISOLATION_WINDOWS)
-                    self.logger.debug('Time {:.6f} Isolated precursor ion {:.4f} at ({:.4f}, {:.4f})'.format(self.time, precursor.precursor_mz, \
-                                                                                                     isolation_windows[
-                                                                                                         0][
-                                                                                                         0][0],
-                                                                                                     isolation_windows[
-                                                                                                         0][
-                                                                                                         0][1]))
+                    isolate_from = isolation_windows[0][0][0]
+                    isolate_to = isolation_windows[0][0][1]
+                    self.logger.debug('Time {:.6f} Isolated precursor ion {:.4f} at ({:.4f}, {:.4f})'.format(self.time,
+                                                                                                             precursor.precursor_mz,
+                                                                                                             isolate_from,
+                                                                                                             isolate_to))
                     self.precursor_information[precursor].append(scan)
 
                     # update dynamic exclusion list to prevent the same precursor ion being fragmented multiple times in
@@ -178,6 +175,11 @@ class IndependentMassSpectrometer(MassSpectrometer):
                     mz_upper = mz * (1 + mz_tol / 1e6)
                     rt_lower = self.time
                     rt_upper = self.time + rt_tol
+
+                    ## just a test
+                    # mz_lower = isolate_from
+                    # mz_upper = isolate_to
+
                     x = ExclusionItem(from_mz=mz_lower, to_mz=mz_upper, from_rt=rt_lower, to_rt=rt_upper)
                     self.logger.debug('Time {:.6f} Created dynamic exclusion window mz ({}-{}) rt ({}-{})'.format(
                         self.time,
@@ -214,7 +216,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
             try:
                 next_scan_param = self.queue[0]
                 next_level = next_scan_param.get(ScanParameters.MS_LEVEL)
-            except IndexError: # if queue is empty, the next one is an MS1 scan by default
+            except IndexError:  # if queue is empty, the next one is an MS1 scan by default
                 next_level = 1
             current_level = scan.ms_level
             current_scan_duration = self.density.scan_durations(current_level, next_level, 1).flatten()[0]
@@ -237,9 +239,9 @@ class IndependentMassSpectrometer(MassSpectrometer):
         self.repeating_scan_parameters = params
 
     def reset(self):
-        for key in self.event_dict: # clear event handlers
+        for key in self.event_dict:  # clear event handlers
             self.clear(key)
-        self.time = 0 # reset internal time and index to 0
+        self.time = 0  # reset internal time and index to 0
         self.idx = 0
 
     def exclude(self, mz, rt):  # TODO: make this faster?
@@ -247,7 +249,8 @@ class IndependentMassSpectrometer(MassSpectrometer):
             exclude_mz = x.from_mz <= mz <= x.to_mz
             exclude_rt = x.from_rt <= rt <= x.to_rt
             if exclude_mz and exclude_rt:
-                self.logger.debug('Time {:.6f} Excluded precursor ion mz {:.4f} rt {:.2f} because of {}'.format(self.time, mz, rt, x))
+                self.logger.debug(
+                    'Time {:.6f} Excluded precursor ion mz {:.4f} rt {:.2f} because of {}'.format(self.time, mz, rt, x))
                 return True
         return False
 
@@ -309,7 +312,8 @@ class IndependentMassSpectrometer(MassSpectrometer):
         mz_peaks = []
         for which_isotope in range(len(chemical.isotopes)):
             for which_adduct in range(len(self._get_adducts(chemical))):
-                mz_peaks.extend(self._get_mz_peaks(chemical, query_rt, ms_level, isolation_windows, which_isotope, which_adduct))       
+                mz_peaks.extend(
+                    self._get_mz_peaks(chemical, query_rt, ms_level, isolation_windows, which_isotope, which_adduct))
         if mz_peaks == []:
             return None
         else:
@@ -320,7 +324,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
         # ms_level =1. So we would go to the "else". We then check the ms1 window matched. It then would loop through
         # the children who have ms_level = 2. So we then go to second elif and return the mz and intensity of each ms2 fragment
         mz_peaks = []
-        if ms_level == 1 and chemical.ms_level == 1: # fragment ms1 peaks
+        if ms_level == 1 and chemical.ms_level == 1:  # fragment ms1 peaks
             # returns ms1 peaks if chemical is has ms_level = 1 and scan is an ms1 scan
             if not (which_isotope > 0 and which_adduct > 0):
                 # rechecks isolations window if not monoisotopic and "M + H" adduct
@@ -329,7 +333,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
                     mz = self._get_mz(chemical, query_rt, which_isotope, which_adduct)
                     mz_peaks.extend([(mz, intensity)])
         elif ms_level > 1 and which_isotope > 0:
-            pass # TODO: we need to deal with msN fragmentation of non-monoisotopic peaks?
+            pass  # TODO: we need to deal with msN fragmentation of non-monoisotopic peaks?
             # does not return any ms2+ fragments if not monoisotopic
         elif ms_level == chemical.ms_level:
             # returns ms2 fragments if chemical and scan are both ms2, 
@@ -362,7 +366,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
             intensity = chemical.isotopes[which_isotope][1] * self._get_adducts(chemical)[which_adduct][1] * \
                         chemical.max_intensity
             return intensity * chemical.chromatogram.get_relative_intensity(query_rt - chemical.rt)
-        else:               
+        else:
             return self._get_intensity(chemical.parent, query_rt, which_isotope, which_adduct) * \
                    chemical.parent_mass_prop * chemical.prop_ms2_mass
 
@@ -372,7 +376,8 @@ class IndependentMassSpectrometer(MassSpectrometer):
                                           self._get_adducts(chemical)[which_adduct][0]) +
                     chemical.chromatogram.get_relative_mz(query_rt - chemical.rt))
         else:
-            return adduct_transformation(chemical.isotopes[which_isotope][0], self._get_adducts(chemical)[which_adduct][0])
+            return adduct_transformation(chemical.isotopes[which_isotope][0],
+                                         self._get_adducts(chemical)[which_adduct][0])
 
     def _isolation_match(self, chemical, query_rt, isolation_windows, which_isotope, which_adduct):
         # assumes list is formated like:
@@ -382,8 +387,9 @@ class IndependentMassSpectrometer(MassSpectrometer):
                 return True
         return False
 
+
 class DsDAMassSpec(IndependentMassSpectrometer):
-    
+
     def run(self, schedule, pbar=None):
         self.schedule = schedule
         self.time = schedule["targetTime"][0]
@@ -409,7 +415,7 @@ class DsDAMassSpec(IndependentMassSpectrometer):
                 if pbar is not None and self.time is not None:
                     elapsed = self.time - initial_time
                     pbar.update(elapsed)
-                    
+
         finally:
             self.fire_event(MassSpectrometer.ACQUISITION_STREAM_CLOSING)
             if pbar is not None:
