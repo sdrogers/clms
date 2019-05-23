@@ -39,6 +39,7 @@ class ScanParameters(object):
     PRECURSOR = 'precursor'
     DYNAMIC_EXCLUSION_MZ_TOL = 'mz_tol'
     DYNAMIC_EXCLUSION_RT_TOL = 'rt_tol'
+    TIME = 'time'
 
     def __init__(self):
         self.params = {}
@@ -382,51 +383,57 @@ class IndependentMassSpectrometer(MassSpectrometer):
                 return True
         return False
 
+
 class DsDAMassSpec(IndependentMassSpectrometer):
-    
+
     def run(self, schedule, pbar=None):
         self.schedule = schedule
         self.time = schedule["targetTime"][0]
-        initial_time = schedule["targetTime"][0]
         self.fire_event(MassSpectrometer.ACQUISITION_STREAM_OPENING)
-        try:
-            for time_index in range(len(self.schedule["targetTime"])):
-                initial_time = self.time
-                if len(self.queue) == 0:
-                    param = self.repeating_scan_parameters
-                else:
-                    # otherwise pop the parameter for the next scan from the queue
-                    param = self.queue.pop(0)
-                scan = self.get_next_scan(param, time_index)
-                # logger.debug('time %f scan %s' % (self.time, scan))
 
-                # if MS2 and above, and the controller tells us which precursor ion the scan is coming from, store it
-                precursor = param.get(ScanParameters.PRECURSOR)
-                if scan.ms_level >= 2 and precursor is not None and scan.num_peaks > 0:
-                    self.precursor_information[precursor].append(scan)
+        try:
+            last_ms1_id = 0
+            while len(self.queue) != 0:
+                scan_params = self.queue.pop(0)
+
+                # make a scan
+                target_time = scan_params.get(ScanParameters.TIME)
+                scan = self._get_scan(target_time, scan_params)
+
+                # set scan duration
+                try:
+                    next_time = self.queue[0].get(ScanParameters.TIME)
+                except IndexError:
+                    next_time = 1
+                scan.scan_duration = next_time - target_time
+
+                # update precursor scan id
+                if scan.ms_level == 1:
+                    last_ms1_id = scan.scan_id
+                else:
+                    precursor = scan_params.get(ScanParameters.PRECURSOR)
+                    if precursor is not None:
+                        precursor.precursor_scan_id = last_ms1_id
+                        self.precursor_information[precursor].append(scan)
+
+                # notify controller about this scan
+                self.fire_event(self.MS_SCAN_ARRIVED, scan)
+
+                # increase mass spec time
+                self.idx += 1
+                self.time += scan.scan_duration
 
                 # print a progress bar if provided
-                if pbar is not None and self.time is not None:
-                    elapsed = self.time - initial_time
+                if pbar is not None:
+                    elapsed = self.time
                     pbar.update(elapsed)
-                    
+                    # TODO: fix error bar
+
         finally:
             self.fire_event(MassSpectrometer.ACQUISITION_STREAM_CLOSING)
             if pbar is not None:
                 pbar.close()
 
-    def get_next_scan(self, param, time_index):
-        if param is not None:
-            scan = self._get_scan(self.time, param)
-            self.fire_event(self.MS_SCAN_ARRIVED, scan)
-            self.idx += 1
-            if time_index + 1 < len(self.schedule["targetTime"]):
-                self.time = self.schedule["targetTime"][time_index + 1]
-            else:
-                self.time = None
-            return scan
-        else:
-            return None
 
 # class ThermoFusionMassSpectrometer:
 

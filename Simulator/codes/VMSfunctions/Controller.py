@@ -87,8 +87,15 @@ class SimpleMs1Controller(Controller):
         pass  # do nothing
 
 
-Precursor = namedtuple('Precursor', 'precursor_mz precursor_intensity precursor_charge precursor_scan_id')
+class Precursor(object):
+    def __init__(self, precursor_mz, precursor_intensity, precursor_charge, precursor_scan_id):
+        self.precursor_mz = precursor_mz
+        self.precursor_intensity = precursor_intensity
+        self.precursor_charge = precursor_charge
+        self.precursor_scan_id = precursor_scan_id
 
+    def __str__(self):
+        return 'Precursor mz %f intensity %f charge %d scan_id %d' % (self.precursor_mz, self.precursor_intensity, self.precursor_charge, self.precursor_scan_id)
 
 class TopNController(Controller):
     def __init__(self, mass_spec, N, isolation_window, mz_tol, rt_tol, min_ms1_intensity):
@@ -373,10 +380,6 @@ class DsDAController(Controller):
         self.min_ms1_intensity = min_ms1_intensity  # minimum ms1 intensity to fragment
 
         mass_spec.reset()
-        default_scan = ScanParameters()
-        default_scan.set(ScanParameters.MS_LEVEL, 1)
-        default_scan.set(ScanParameters.ISOLATION_WINDOWS, [[DEFAULT_MS1_SCAN_WINDOW]])
-        mass_spec.set_repeating_scan(default_scan)
 
         # register new event handlers under this controller
         mass_spec.register(MassSpectrometer.MS_SCAN_ARRIVED, self.handle_scan)
@@ -385,8 +388,34 @@ class DsDAController(Controller):
 
     def run(self, schedule_file, progress_bar=True):
         self.schedule = pd.read_csv(schedule_file)
+        for idx, row in self.schedule.iterrows():
+            target_mass = row.targetMass
+            target_time = row.targetTime
+
+            if np.isnan(target_mass):
+                ms_level = 1
+                isolation_windows = [[(0, 1000)]]
+                precursor = None
+            else:
+                ms_level = 2
+                mz_lower = target_mass - self.isolation_window
+                mz_upper = target_mass + self.isolation_window
+                isolation_windows = [[(mz_lower, mz_upper)]]
+                precursor_charge = +1 if (self.mass_spec.ionisation_mode == POSITIVE) else -1
+                scan_id = 0
+                precursor = Precursor(precursor_mz=target_mass, precursor_intensity=0,
+                                      precursor_charge=precursor_charge, precursor_scan_id=scan_id)
+
+            dda_scan_params = ScanParameters()
+            dda_scan_params.set(ScanParameters.MS_LEVEL, ms_level)
+            dda_scan_params.set(ScanParameters.ISOLATION_WINDOWS, isolation_windows)
+            dda_scan_params.set(ScanParameters.TIME, target_time)
+            if precursor:
+                dda_scan_params.set(ScanParameters.PRECURSOR, precursor)
+            self.mass_spec.add_to_queue(dda_scan_params)  # push this scan to the mass spec queue
+
         if progress_bar:
-            with tqdm(total=self.schedule["targetTime"].values[-1] - self.schedule["targetTime"].values[0],
+            with tqdm(total=target_time,
                       initial=0) as pbar:
                 self.mass_spec.run(self.schedule, pbar=pbar)
         else:
@@ -408,38 +437,8 @@ class DsDAController(Controller):
                 self._plot_scan(scan)
 
     def _update_parameters(self, scan):
+        pass
 
-        # if there's a previous ms1 scan to process
-        if self.last_ms1_scan is not None and scan.rt != self.schedule["targetTime"][0]:
 
-            rt = scan.rt
 
-            next_row = np.where(np.array(self.schedule["targetTime"]) == rt)[0].tolist()[0] + 1
-            mzs = np.array(
-                [self.schedule["targetMass"][i] for i in range(next_row, min(next_row + 4, self.schedule.shape[0]), 1)])
 
-            for i in range(len(mzs)):  # define isolation window around the selected precursor ions
-
-                mz = mzs[i]
-
-                if self.mass_spec.ionisation_mode == POSITIVE:
-                    precursor_charge = +1  # assume it's all +1 if positive
-                elif self.mass_spec.ionisation_mode == NEGATIVE:
-                    precursor_charge = -1
-
-                mz_lower = mz - self.isolation_window
-                mz_upper = mz + self.isolation_window
-                isolation_windows = [[(mz_lower, mz_upper)]]
-                self.logger.debug('Isolated precursor ion {:.4f} window ({:.4f}, {:.4f})'.format(mz, \
-                                                                                                 isolation_windows[0][
-                                                                                                     0][0],
-                                                                                                 isolation_windows[0][
-                                                                                                     0][1]))
-                dda_scan_params = ScanParameters()
-                dda_scan_params.set(ScanParameters.MS_LEVEL, 2)
-                dda_scan_params.set(ScanParameters.ISOLATION_WINDOWS, isolation_windows)
-                # dda_scan_params.set(ScanParameters.PRECURSOR, precursor)
-                self.mass_spec.add_to_queue(dda_scan_params)  # push this dda scan to the mass spec queue
-
-            # set this ms1 scan as has been processed
-            self.last_ms1_scan = None
