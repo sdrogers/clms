@@ -156,7 +156,7 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
                 # if MS2 and above, and the controller tells us which precursor ion the scan is coming from, store it
                 precursor = param.get(ScanParameters.PRECURSOR)
-                if scan.ms_level >= 2 and precursor is not None and scan.num_peaks > 0:
+                if scan.ms_level >= 2 and precursor is not None:
 
                     # update precursor ion information
                     isolation_windows = param.get(ScanParameters.ISOLATION_WINDOWS)

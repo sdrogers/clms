@@ -68,7 +68,14 @@ class MzmlWriter(object):
 
     def sort_filter(self, all_scans):
         all_scans = sorted(all_scans, key=lambda x: x.scan_id)
-        all_scans = [x for x in all_scans if x.num_peaks > 0]
+        # all_scans = [x for x in all_scans if x.num_peaks > 0]
+
+        # add a single peak to empty scans
+        empty = [x for x in all_scans if x.num_peaks == 0]
+        for scan in empty:
+            scan.mzs = np.array([100.0])
+            scan.intensities = np.array([1.0])
+            scan.num_peaks = 1
         return all_scans
 
     def _write_spectra(self, writer, scans, precursor_information):
