@@ -118,7 +118,10 @@ class TopNController(Controller):
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_OPENING, self.handle_acquisition_open)
         mass_spec.register(MassSpectrometer.ACQUISITION_STREAM_CLOSING, self.handle_acquisition_closing)
 
-    def run(self, min_time, max_time, progress_bar=True):
+    def run(self, min_time=None, max_time=None, progress_bar=True):
+        if min_time is None and max_time is None:
+            min_time = self.mass_spec.schedule["targetTime"].values[0]
+            max_time = self.mass_spec.schedule["targetTime"].values[-1]
         if progress_bar:
             with tqdm(total=max_time - min_time, initial=0) as pbar:
                 self.mass_spec.run(min_time, max_time, pbar=pbar)
@@ -371,7 +374,7 @@ class DiaWindows(object):
 
 
 class DsDAController(Controller):
-    def __init__(self, mass_spec, N, isolation_window, rt_tol, min_ms1_intensity, exclusion_list=None):
+    def __init__(self, mass_spec, N, isolation_window, rt_tol, min_ms1_intensity):
         super().__init__(mass_spec)
         self.last_ms1_scan = None
         self.N = N

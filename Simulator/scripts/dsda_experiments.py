@@ -25,10 +25,20 @@ chemicals = ChemicalCreator(ps)
 n_peaks = 1000
 dataset = chemicals.sample(cc, mz_range, rt_range, min_ms1_intensity, n_peaks, 2, "Unknown", None, None, fixed_mz = True)
 
+# set_log_level_warning()
+# last_schedule = get_schedule(29, schedule_dir)
+# mass_spec = DsDAMassSpec(POSITIVE, dataset, density=ps.density_estimator)
+# controller = DsDAController(mass_spec, 1, 0.5, 15, 2E5)
+# controller.run(last_schedule)
+#
+# controller.write_mzML('my_analysis', data_dir + '\\hello.mzML')
+
+isolation_window = 1   # the isolation window in Dalton around a selected precursor ion
+N = 4
+rt_tol = 15
+mz_tol = 10
 set_log_level_warning()
 last_schedule = get_schedule(29, schedule_dir)
-mass_spec = DsDAMassSpec(POSITIVE, dataset, density=ps.density_estimator)
-controller = DsDAController(mass_spec, 1, 0.5, 15, 2E5)
-controller.run(last_schedule)
-
-controller.write_mzML('my_analysis', data_dir + '\\hello.mzML')
+mass_spec = IndependentMassSpectrometer(POSITIVE, dataset, density=ps.density_estimator, schedule_file=last_schedule)
+controller = TopNController(mass_spec, N, isolation_window, mz_tol, rt_tol, min_ms1_intensity)
+controller.run(rt_range[0][0], rt_range[0][1])

@@ -118,7 +118,7 @@ ExclusionItem = namedtuple('ExclusionItem', 'from_mz to_mz from_rt to_rt')
 # Independent here refers to how the intensity of each peak in a scan is independent of each other
 # i.e. there's no ion supression effect
 class IndependentMassSpectrometer(MassSpectrometer):
-    def __init__(self, ionisation_mode, chemicals, density=None):
+    def __init__(self, ionisation_mode, chemicals, density=None, schedule_file = None):
         super().__init__(ionisation_mode)
         self.chemicals = chemicals
         self.idx = 0
@@ -127,6 +127,9 @@ class IndependentMassSpectrometer(MassSpectrometer):
         self.repeating_scan_parameters = None
         self.precursor_information = defaultdict(list) # key: Precursor object, value: ms2 scans
         self.density = density # a PeakDensityEstimator object
+        self.schedule_file = schedule_file
+        if self.schedule_file is not None:
+            self.schedule = pd.read_csv(schedule_file)
         self.fragmentation_events = [] # which chemicals produce which peaks
         self.previous_level = None # ms_level of the previous scan
 
@@ -137,7 +140,11 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
 
     def run(self, min_time, max_time, pbar=None):
-        self.time = min_time
+        if self.schedule_file is None:
+            self.time = min_time
+        else:
+            self.time = self.schedule["targetTime"].values[0]
+            max_time = self.schedule["targetTime"].values[-1]
         self.fire_event(MassSpectrometer.ACQUISITION_STREAM_OPENING)
         try:
             while self.time < max_time:
@@ -160,13 +167,10 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
                     # update precursor ion information
                     isolation_windows = param.get(ScanParameters.ISOLATION_WINDOWS)
-                    self.logger.debug('Time {:.6f} Isolated precursor ion {:.4f} at ({:.4f}, {:.4f})'.format(self.time, precursor.precursor_mz, \
-                                                                                                     isolation_windows[
-                                                                                                         0][
-                                                                                                         0][0],
-                                                                                                     isolation_windows[
-                                                                                                         0][
-                                                                                                         0][1]))
+                    iso_min = isolation_windows[0][0][0]
+                    iso_max = isolation_windows[0][0][1]
+                    self.logger.debug('Time {:.6f} Isolated precursor ion {:.4f} at ({:.4f}, {:.4f})'.format(self.time, precursor.precursor_mz,
+                                                                                                             iso_min, iso_max))
                     self.precursor_information[precursor].append(scan)
 
                     # update dynamic exclusion list to prevent the same precursor ion being fragmented multiple times in
@@ -223,7 +227,10 @@ class IndependentMassSpectrometer(MassSpectrometer):
 
             # increase simulator scan index and time
             self.idx += 1
-            self.time += scan.scan_duration
+            if self.schedule_file is None:
+                self.time += scan.scan_duration
+            else:
+                self.time = self.schedule["targetTime"][self.idx]
             return scan
         else:
             return None
