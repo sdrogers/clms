@@ -396,7 +396,7 @@ class MultiSampleCreator(LoggerMixin):
 
     def __init__(self, original_dataset, n_samples, classes, intensity_noise_sd,
                  change_probabilities, change_differences_means, change_differences_sds, dropout_probabilities=None,
-                 experimental_classes=None, experimental_probabilitities=None, experimental_sds=None):
+                 experimental_classes=None, experimental_probabilitities=None, experimental_sds=None, save_location=None):
         self.original_dataset = original_dataset
         self.n_samples = n_samples
         self.classes = classes
@@ -408,6 +408,7 @@ class MultiSampleCreator(LoggerMixin):
         self.experimental_classes = experimental_classes
         self.experimental_probabilitities = experimental_probabilitities
         self.experimental_sds = experimental_sds
+        self.save_location = save_location
 
         self.sample_classes = []
         for index_classes in range(len(self.classes)):
@@ -433,6 +434,8 @@ class MultiSampleCreator(LoggerMixin):
                     new_sample[index_chemical].max_intensity = noisy_adjusted_intensity.tolist()[0]
             chemicals_to_keep = np.where((np.array(self.chemical_statuses)[which_class][0]) != "missing")
             new_sample = np.array(new_sample)[chemicals_to_keep].tolist()
+            if self.save_location is not None:
+                save_obj(new_sample, self.save_location + '\\sample_%d.p' % index_sample)
             self.samples.append(new_sample)
 
     def _get_chemical_statuses(self):
