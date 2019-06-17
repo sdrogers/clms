@@ -11,6 +11,7 @@ MZ = 'mz'
 INTENSITY = 'intensity'
 MZ_INTENSITY = MZ + '_' + INTENSITY
 RT = 'rt'
+MZ_INTENSITY_RT = MZ + '_' + INTENSITY + '_' + RT
 N_PEAKS = 'n_peaks'
 SCAN_DURATION = 'scan_duration'
 POSITIVE = 'positive'
