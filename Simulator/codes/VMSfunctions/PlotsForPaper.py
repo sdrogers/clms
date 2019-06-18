@@ -56,7 +56,7 @@ def get_df(csv_file, min_ms1_intensity, rt_range, mz_range):
     return df
 
 
-def make_boxplot(df, x, y, xticklabels, title):
+def make_boxplot(df, x, y, xticklabels, title, outfile=None):
     g = sns.catplot(x=x, y=y, kind='box', data=df)
     g.fig.set_size_inches(10, 3)
     if xticklabels is not None:
@@ -65,6 +65,8 @@ def make_boxplot(df, x, y, xticklabels, title):
         g.set_xticklabels(rotation=90)
     plt.title(title)
     plt.tight_layout()
+    if outfile is not None:
+        plt.savefig(outfile, dpi=300)
     plt.show()
 
 
@@ -164,14 +166,40 @@ def load_controllers(results_dir, Ns, rt_tols):
     return controllers
 
 
-def compute_performance(controller, dataset, min_ms1_intensity):
+def get_matched_chemicals_scenario_1(experiment_name, experiment_out_dir,
+                                     experiment_to_filename, P_peaks_df,
+                                     matching_mz_tol, matching_rt_tol):
+    # load the list of chemicals that we put into the simulator for each experiment
+    print('Processing %s' % experiment_out_dir)
+    dataset = load_obj(os.path.join(experiment_out_dir, 'dataset.p'))
+
+    # load the list of xcms-picked peaks
+    full_scan_filename = experiment_to_filename[experiment_name]
+    detected_ms1 = df_to_chemicals(P_peaks_df, full_scan_filename)
+
+    # match with xcms peak-picked ms1 data
+    matches = match(dataset, detected_ms1, matching_mz_tol, matching_rt_tol, verbose=False)
+
+    # check if matched
+    found = 0
+    for chem in dataset:
+        if chem in matches:
+            chem.found_in_fullscan = True
+            found += 1
+        else:
+            chem.found_in_fullscan = False
+    print('Matched', found, '/', len(dataset), 'in fullscan ms1 data')
+    return dataset
+
+
+def compute_performance_scenario_1(controller, dataset, min_ms1_intensity):
     ms_level = 2
     chem_to_frag_events = get_frag_events(controller, ms_level)
 
     # positive instances are ground truth MS1 peaks found by XCMS
     # negative instances are chemicals that cannot be matched to XCMS output
-    positives = list(filter(lambda x: x.found_in_ms1, dataset))
-    negatives = list(filter(lambda x: not x.found_in_ms1, dataset))
+    positives = list(filter(lambda x: x.found_in_fullscan, dataset))
+    negatives = list(filter(lambda x: not x.found_in_fullscan, dataset))
 
     # for both positive and negative instances, count how many frag events they have
     # and whether it's above (good) or below (bad) the minimum ms1 intensity at the time of fragmentation.
@@ -192,6 +220,80 @@ def compute_performance(controller, dataset, min_ms1_intensity):
     tp = len(tp)
     fp = len(fp)
     fn = len(fn)
+    prec = tp / (tp + fp)
+    rec = tp / (tp + fn)
+    f1 = (2 * prec * rec) / (prec + rec)
+    prec, rec, f1
+    return tp, fp, fn, prec, rec, f1
+
+
+def get_matched_chemicals_scenario_2(experiment_name, experiment_out_dir,
+                                     experiment_to_filename, fragfile_filename,
+                                     P_peaks_df, Q_peaks_df,
+                                     matching_mz_tol, matching_rt_tol):
+    # load the list of chemicals that we put into the simulator for each experiment
+    print('Processing %s' % experiment_out_dir)
+    dataset = load_obj(os.path.join(experiment_out_dir, 'dataset.p'))
+
+    # load the list of xcms-picked peaks
+    full_scan_filename = experiment_to_filename[experiment_name]
+    detected_from_fullscan = df_to_chemicals(P_peaks_df, full_scan_filename)
+    detected_from_fragfile = df_to_chemicals(Q_peaks_df, fragfile_filename)
+
+    # match with xcms peak-picked ms1 data from fullscan file
+    matches_fullscan = match(dataset, detected_from_fullscan, matching_mz_tol, matching_rt_tol, verbose=False)
+
+    # match with xcms peak-picked ms1 data from fragmentation file
+    matches_fragfile = match(dataset, detected_from_fragfile, matching_mz_tol, matching_rt_tol, verbose=False)
+
+    # check if matched
+    found_in_fullscan = 0
+    found_in_fragfile = 0
+
+    for chem in dataset:
+
+        # check if a match is found in fullscan mzML
+        if chem in matches_fullscan:
+            chem.found_in_fullscan = True
+            found_in_fullscan += 1
+        else:
+            chem.found_in_fullscan = False
+
+        # check if a match is found in fragmentation mzML
+        if chem in matches_fragfile:
+            chem.found_in_fragfile = True
+            found_in_fragfile += 1
+        else:
+            chem.found_in_fragfile = False
+
+    print('Matched %d/%d in fullscan data, %d/%d in fragmentation data' % (found_in_fullscan, len(dataset),
+                                                                           found_in_fragfile, len(dataset)))
+    return dataset
+
+
+def compute_performance_scenario_2(controller, dataset, min_ms1_intensity):
+    ms_level = 2
+    chem_to_frag_events = get_frag_events(controller, ms_level)
+
+    # True positive: a peak that is fragmented above the minimum MS1 intensity and is picked by XCMS from
+    # the MS1 information in the DDA file and is picked in the fullscan file.
+    found_in_both = list(filter(lambda x: x.found_in_fullscan and x.found_in_fragfile, dataset))
+    frag_count = get_chem_frag_counts(found_in_both, chem_to_frag_events, min_ms1_intensity)
+    tp = [chem for chem in found_in_both if frag_count[chem]['good'] > 0 and frag_count[chem]['bad'] == 0]
+    tp = len(tp)
+
+    # False positive: any peak that is above minimum intensity and is picked by XCMS
+    # from the DDA file but is not picked from the fullscan.
+    found_in_dda_only = list(filter(lambda x: not x.found_in_fullscan and x.found_in_fragfile, dataset))
+    frag_count = get_chem_frag_counts(found_in_dda_only, chem_to_frag_events, min_ms1_intensity)
+    fp = [chem for chem in found_in_dda_only if frag_count[chem]['good'] > 0 and frag_count[chem]['bad'] == 0]
+    fp = len(fp)
+
+    # False negative: any peak that is picked from fullscan data, and is not fragmented, or
+    # is fragmented below the minimum intensity.
+    found_in_fullscan = list(filter(lambda x: x.found_in_fullscan, dataset))
+    fn = len(found_in_fullscan) - tp
+
     prec = tp / (tp + fp)
     rec = tp / (tp + fn)
     f1 = (2 * prec * rec) / (prec + rec)
