@@ -364,8 +364,9 @@ class ChemicalCreator(LoggerMixin):
             return self._get_unknown_msn(ms_level, ROI, sampled_peak)
 
     def _get_known_ms1(self, formula, ROI, sampled_peak):  # fix this
-        mz = Formula(formula).mass
         rt = sampled_peak.rt
+        #len_chrom = ROI.chromatogram.
+        #adjusted_rt = rt
         intensity = sampled_peak.intensity
         formula = Formula(formula)
         isotopes = Isotopes(formula)
