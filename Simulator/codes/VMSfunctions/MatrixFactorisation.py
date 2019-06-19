@@ -1,6 +1,7 @@
 import numpy as np
 import pylab as plt
 import bisect
+import copy
 
 
 class BlockData(object):
@@ -61,7 +62,7 @@ class BlockData(object):
         return combined
 
 
-def gibbs_sampler(X, observed, R, prior_u, prec_u, prior_v, prec_v, alpha, n_its = 1000, burn_in = 100, true_V=[]):
+def gibbs_sampler(X, observed, R, prior_u, prec_u, prior_v, prec_v, alpha, n_its = 1000, burn_in = 100, true_V=[], sample_known = True):
     # initialise
     N, M = X.shape
     U = np.random.normal(size=(N, R))
@@ -71,13 +72,18 @@ def gibbs_sampler(X, observed, R, prior_u, prec_u, prior_v, prec_v, alpha, n_its
         V = true_V
     tot_U = np.zeros((N, R))
     tot_V = np.zeros((M, R))
+    samples_U = []
+    samples_V = []
     all_err = []
+    range_U = range(N)
+    if sample_known is False:
+        range_U = np.where(np.sum(observed, axis=1) != len(observed[0, :]))[0].tolist()
     for it in range(n_its):
         # loop over u, updating them
         # first compute the covariance - shared if all data observed
         prec_mat = prec_u + alpha * np.dot(V.T, V)
         cov_mat = np.linalg.inv(prec_mat)
-        for n in range(N):
+        for n in range_U:
             if observed[n, :].sum() < M:
                 # not all data observed, compute specific precision
                 this_prec_mat = prec_u + alpha * np.dot(np.dot(V.T, np.diag(observed[n, :])), V)
@@ -115,15 +121,21 @@ def gibbs_sampler(X, observed, R, prior_u, prec_u, prior_v, prec_v, alpha, n_its
                 s += np.dot(prec_v, prior_v)
                 cond_mu = np.dot(this_cov_mat, s)
                 V[m, :] = np.random.multivariate_normal(cond_mu, this_cov_mat)
-        if it >  burn_in:
+        if it > burn_in:
             tot_U += U
             tot_V += V
-
+            samples_U.append(copy.deepcopy(U))
+            samples_V.append(copy.deepcopy(V))
         recon_error = np.sqrt(((X - np.dot(U, V.T)) ** 2).mean())
         all_err.append(recon_error)
-
     if len(true_V) == 0:
         return tot_U / (n_its - burn_in), tot_V / (n_its - burn_in)
     else:
-        return tot_U / (n_its - burn_in), true_V
+        if sample_known is True:
+            return samples_U
+        else:
+            updated_samples_U = []
+            for i in range(len(samples_U)):
+                updated_samples_U.append(samples_U[i][range_U,:])
+            return range_U, updated_samples_U
 
