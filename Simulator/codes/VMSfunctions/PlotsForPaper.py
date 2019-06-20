@@ -1,6 +1,13 @@
+import os
+from collections import defaultdict
+
+import numpy as np
+import pandas as pd
+import pylab as plt
 import seaborn as sns
 
-from VMSfunctions.Controller import *
+from VMSfunctions.Chemicals import UnknownChemical
+from VMSfunctions.Common import load_obj, PROTON_MASS
 
 
 def get_N(row):
@@ -14,8 +21,8 @@ def get_dew(row):
     if 'T10' in row['filename']:
         return 15
     else:
-        tok = row['filename'].split('_')[5] # get the dew value in the filename
-        return tok.split('.')[0] # get the part before '.mzML'
+        tok = row['filename'].split('_')[5]  # get the dew value in the filename
+        return tok.split('.')[0]  # get the part before '.mzML'
 
 
 def experiment_group(row):
@@ -36,12 +43,26 @@ def add_group_column(df):
 
 def get_df(csv_file, min_ms1_intensity, rt_range, mz_range):
     df = pd.read_csv(csv_file)
+    return filter_df(df, min_ms1_intensity, rt_range, mz_range)
+
+
+def filter_df(df, min_ms1_intensity, rt_range, mz_range):
+    # filter by rt range
+    if rt_range is not None:
+        df = df[(df['rt'] > rt_range[0][0]) & (df['rt'] < rt_range[0][1])]
+
+    # filter by mz range
+    if mz_range is not None:
+        df = df[(df['rt'] > mz_range[0][0]) & (df['rt'] < mz_range[0][1])]
+
+    # filter by min intensity
     intensity_col = 'maxo'
-    df = df[(df['rt'] > rt_range[0][0]) & (df['rt'] < rt_range[0][1])]
-    df = df[(df['rt'] > mz_range[0][0]) & (df['rt'] < mz_range[0][1])]
-    df = df[(df[intensity_col] > min_ms1_intensity)]
+    if min_ms1_intensity is not None:
+        df = df[(df[intensity_col] > min_ms1_intensity)]
+
     # add log intensity column
     df['log_intensity'] = df.apply(lambda row: np.log(row[intensity_col]), axis=1)
+
     # add N column
     try:
         df['N'] = df.apply(lambda row: get_N(row), axis=1)
@@ -214,8 +235,8 @@ def compute_performance_scenario_1(controller, dataset, min_ms1_intensity):
 
     # FN = positive instances that are not fragmented at all + positive instances that are bad only
     fn = [chem for chem in positives if \
-            (positives_count[chem]['good'] == 0 and positives_count[chem]['bad'] == 0) or \
-            (positives_count[chem]['good'] == 0 and positives_count[chem]['bad'] > 0)]
+          (positives_count[chem]['good'] == 0 and positives_count[chem]['bad'] == 0) or \
+          (positives_count[chem]['good'] == 0 and positives_count[chem]['bad'] > 0)]
 
     tp = len(tp)
     fp = len(fp)
