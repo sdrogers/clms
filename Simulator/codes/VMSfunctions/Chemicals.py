@@ -365,18 +365,22 @@ class ChemicalCreator(LoggerMixin):
 
     def _get_known_ms1(self, formula, ROI, sampled_peak):  # fix this
         rt = sampled_peak.rt
+        min2mid_rt_ROI = list(ROI.chromatogram.rts[np.where(ROI.chromatogram.intensities == 1)])[0]
+        adjusted_rt = rt - min2mid_rt_ROI
         intensity = sampled_peak.intensity
         formula = Formula(formula)
         isotopes = Isotopes(formula)
         adducts = Adducts(formula, self.adduct_proportion_cutoff)
-        return KnownChemical(formula, isotopes, adducts, rt, intensity, ROI.chromatogram, None)
+        return KnownChemical(formula, isotopes, adducts, adjusted_rt, intensity, ROI.chromatogram, None)
 
     def _get_unknown_msn(self, ms_level, ROI, sampled_peak, parent=None):  # fix this
         if ms_level == 1:
             mz = sampled_peak.mz
             rt = sampled_peak.rt
+            min2mid_rt_ROI = list(ROI.chromatogram.rts[np.where(ROI.chromatogram.intensities == 1)])[0]
+            adjusted_rt = rt - min2mid_rt_ROI
             intensity = sampled_peak.intensity
-            return UnknownChemical(mz, rt, intensity, ROI.chromatogram, None)
+            return UnknownChemical(mz, adjusted_rt, intensity, ROI.chromatogram, None)
         else:
             if ms_level == 2:
                 mz = self.peak_sampler.sample(ms_level, 1)[0].mz
