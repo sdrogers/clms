@@ -67,7 +67,33 @@ class FragmentationPerformance(object):
             self.chemicals_found_total = [sum(sum(np.array(self.chemicals_found)[0:i, :]) > 0) for i in range(1, len(file_names)+1)]
             self.total_matched_chemicals = len(aligned_chemicals["mzmed"])
         else:
-            print("Not Implemented")
-            self.chemicals_found_total = None
-            self.total_matched_chemicals = None
-            self.chemicals_found = None
+            os.chdir(controller_directory)
+            file_names = glob.glob(controller_file_spec)
+            n_samples = len(file_names)
+            controllers = []
+            all_chemicals = []
+            for controller_index in range(n_samples):
+                controller = load_obj(file_names[controller_index])
+                controllers.append(controller)
+                all_chemicals.extend(controller.mass_spec.chemicals)
+            all_rts = [chem.rt for chem in all_chemicals]
+            self.chemicals_found_total = np.unique(all_rts)
+            min_acceptable_intensity = 1E5
+            # get parent start RTs from each controller.
+            sample_chemical_start_rts = [[] for i in range(n_samples)]
+            sample_chemical_start_rts_total = []
+
+            for i in range(n_samples):
+                for event in controllers[i].mass_spec.fragmentation_events:
+                    if event.ms_level == 2:
+                        if controllers[i].mass_spec._get_intensity(event.chem, event.query_rt, 0,
+                                                                   0) > min_acceptable_intensity:
+                            sample_chemical_start_rts[i].append(event.chem.rt)
+                sample_chemical_start_rts[i] = np.unique(np.array(sample_chemical_start_rts[i])).tolist()
+                # at this point we have collected the RTs of the all the chemicals that
+                # have been fragmented above the min_intensity threshold
+                flatten_rts = []
+                for l in sample_chemical_start_rts[0:(i + 1)]:
+                    flatten_rts.extend(l)
+                sample_chemical_start_rts_total.append(len(np.unique(np.array(flatten_rts))))
+                self.total_matched_chemicals = sample_chemical_start_rts_total
