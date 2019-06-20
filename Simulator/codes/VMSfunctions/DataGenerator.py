@@ -187,11 +187,12 @@ class DataSource(LoggerMixin):
             if data_type == MZ:
                 X = df['mz'].values
             elif data_type == RT:
-                X = df['rtmin'].values
+                # we use rt for the starting value for the chemical to elute
+                X = df['rt'].values
             elif data_type == INTENSITY:
                 X = df['maxo'].values
             elif data_type == MZ_INTENSITY_RT:
-                X = df[['mz', 'rtmin', 'maxo']].values
+                X = df[['mz', 'maxo', 'rtmin']].values
 
         else:  # else we get the values by reading from the scans in mzML files directly
             self.logger.info('Using values from scans')
