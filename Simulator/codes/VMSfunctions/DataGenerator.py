@@ -1,6 +1,5 @@
 import copy
 import glob
-import os
 
 import math
 import numpy as np
@@ -9,9 +8,8 @@ import pylab as plt
 import pymzml
 from sklearn.neighbors import KernelDensity
 
-from VMSfunctions.Chromatograms import EmpiricalChromatogram
 from VMSfunctions.Common import *
-from VMSfunctions.Roi import *
+from VMSfunctions.PlotsForPaper import filter_df
 
 
 class Peak(object):
@@ -59,6 +57,9 @@ class DataSource(LoggerMixin):
         self.ms1_precision = 5e-6
         self.obo_version = '4.0.1'
 
+        # xcms peak picking results, if any
+        self.df = None
+
     def load_data(self, mzml_path, file_name=None):
         """
         Loads data and generate peaks from mzML files. The resulting peak objects will not have chromatographic peak
@@ -104,6 +105,9 @@ class DataSource(LoggerMixin):
 
         self.file_scan_durations = file_scan_durations
         self.file_spectra = file_spectra
+
+    def load_xcms_output(self, xcms_filename):
+        self.df = pd.read_csv(xcms_filename)
 
     def plot_data(self, file_name, ms_level=1, min_rt=None, max_rt=None, max_data=100000):
         data_types = [MZ, INTENSITY, RT, N_PEAKS, SCAN_DURATION]
@@ -172,6 +176,86 @@ class DataSource(LoggerMixin):
         :param log: if true, the returned values will be logged
         :return: an Nx1 numpy array of all the values requested
         """
+        # if xcms peak picking results are provided, use that instead
+        if self.df is not None:
+            self.logger.info('Using values from XCMS peaklist')
+
+            # remove rows in the peak picked dataframe that are outside threshold values
+            df = filter_df(self.df, min_intensity, [[min_rt, max_rt]], None)
+
+            # extract the values we need
+            if data_type == MZ:
+                X = df['mz'].values
+            elif data_type == RT:
+                # we use rt for the starting value for the chemical to elute
+                X = df['rt'].values
+            elif data_type == INTENSITY:
+                X = df['maxo'].values
+            elif data_type == MZ_INTENSITY_RT:
+                X = df[['mz', 'maxo', 'rtmin']].values
+
+        else:  # else we get the values by reading from the scans in mzML files directly
+            self.logger.info('Using values from scans')
+
+            # get spectra from either one file or all files
+            if filename is None:  # use all spectra
+                all_spectra = []
+                for f in self.file_spectra:
+                    spectra_for_f = list(self.file_spectra[f].values())
+                    all_spectra.extend(spectra_for_f)
+            else:  # use spectra for that file only
+                all_spectra = self.file_spectra[filename].values()
+
+            # loop through spectrum and get all peaks above threshold
+            values = []
+            for spectrum in all_spectra:
+                # if wrong ms level, skip this spectrum
+                if spectrum.ms_level != ms_level:
+                    continue
+
+                # collect all valid Peak objects in a spectrum
+                spectrum_peaks = []
+                for mz, intensity in spectrum.peaks('raw'):
+                    rt = self._get_rt(spectrum)
+                    p = Peak(mz, rt, intensity, spectrum.ms_level)
+                    if self._valid_peak(p, min_intensity, min_rt, max_rt):
+                        spectrum_peaks.append(p)
+
+                if data_type == MZ_INTENSITY_RT:  # used when fitting m/z, rt and intensity together for the manuscript
+                    mzs = list(getattr(x, MZ) for x in spectrum_peaks)
+                    intensities = list(getattr(x, INTENSITY) for x in spectrum_peaks)
+                    rts = list(getattr(x, RT) for x in spectrum_peaks)
+                    values.extend(list(zip(mzs, intensities, rts)))
+
+                else:  # MZ, INTENSITY or RT separately
+                    attrs = list(getattr(x, data_type) for x in spectrum_peaks)
+                    values.extend(attrs)
+
+            X = np.array(values)
+
+        # log-transform if necessary
+        if log:
+            if data_type == MZ_INTENSITY_RT:  # just log the intensity part
+                X[:, 1] = np.log(X[:, 1])
+            else:
+                X = np.log(X)
+
+        # pick random samples
+        try:
+            idx = np.arange(len(X))
+            rnd_idx = np.random.choice(idx, size=int(max_data), replace=False)
+            sampled_X = X[rnd_idx]
+        except ValueError:
+            sampled_X = X
+
+        # return values
+        if data_type == MZ_INTENSITY_RT:
+            return sampled_X  # it's already a Nx2 or Nx3 array
+        else:
+            # convert into Nx1 array
+            return sampled_X[:, np.newaxis]
+
+    def get_n_peaks(self, filename, ms_level, min_intensity=None, min_rt=None, max_rt=None):
         # get spectra from either one file or all files
         if filename is None:  # use all spectra
             all_spectra = []
@@ -197,56 +281,21 @@ class DataSource(LoggerMixin):
                     spectrum_peaks.append(p)
 
             # collect the data points we need into a list
-            if data_type == N_PEAKS: # get number of peaks per scan
-                n_peaks = len(spectrum_peaks)
-                if n_peaks > 0:
-                    values.append(n_peaks)
+            n_peaks = len(spectrum_peaks)
+            if n_peaks > 0:
+                values.append(n_peaks)
 
-            elif data_type == MZ_INTENSITY: # used when fitting m/z and intensity together
-                mzs = list(getattr(x, MZ) for x in spectrum_peaks)
-                intensities = list(getattr(x, INTENSITY) for x in spectrum_peaks)
-                values.extend(list(zip(mzs, intensities)))
-
-            elif data_type == MZ_INTENSITY_RT: # used when fitting m/z, rt and intensity together for the manuscript
-                mzs = list(getattr(x, MZ) for x in spectrum_peaks)
-                intensities = list(getattr(x, INTENSITY) for x in spectrum_peaks)
-                rts = list(getattr(x, RT) for x in spectrum_peaks)
-                values.extend(list(zip(mzs, intensities, rts)))
-
-            else:  # MZ, INTENSITY or RT separately
-                attrs = list(getattr(x, data_type) for x in spectrum_peaks)
-                values.extend(attrs)
-
-        # log-transform if necessary
+        # convert into Nx1 array
         X = np.array(values)
-        if log:
-            if data_type == MZ_INTENSITY or data_type == MZ_INTENSITY_RT:  # just log the intensity part
-                X[:, 1] = np.log(X[:, 1])
-            else:
-                X = np.log(X)
-
-        # pick random samples
-        try:
-            idx = np.arange(len(X))
-            rnd_idx = np.random.choice(idx, size=int(max_data), replace=False)
-            sampled_X = X[rnd_idx]
-        except ValueError:
-            sampled_X = X
-
-        # return values
-        if data_type == MZ_INTENSITY or data_type == MZ_INTENSITY_RT:
-            return sampled_X  # it's already a Nx2 or Nx3 array
-        else:
-            # convert into Nx1 array
-            return sampled_X[:, np.newaxis]
+        return X[:, np.newaxis]
 
     def get_scan_durations(self, fname):
-        if fname is None: # if no filename, then combine all the dictionary keys
+        if fname is None:  # if no filename, then combine all the dictionary keys
             combined = None
             for f in self.file_scan_durations:
-                if combined is None: # copy first one
+                if combined is None:  # copy first one
                     combined = copy.deepcopy(self.file_scan_durations[f])
-                else: # and extend with the subsequent ones
+                else:  # and extend with the subsequent ones
                     for key in combined:
                         combined[key].extend(self.file_scan_durations[f][key])
         else:
@@ -270,89 +319,9 @@ class DataSource(LoggerMixin):
             return True
 
 
-class DensityEstimator(LoggerMixin):
-    """A class to perform kernel density estimation. Takes as input a DataSource class."""
-
-    def __init__(self, min_ms1_intensity, min_ms2_intensity, min_rt, max_rt, plot=False):
-        self.kdes = {}
-        self.kernel = 'gaussian'
-        self.min_ms1_intensity = min_ms1_intensity
-        self.min_ms2_intensity = min_ms2_intensity
-        self.min_rt = min_rt
-        self.max_rt = max_rt
-        self.plot = plot
-        self.file_scan_durations = None
-
-    def kde(self, data_source, filename, ms_level, bandwidth_mz=1.0, bandwidth_intensity=0.01,
-            bandwidth_rt=5.0, bandwidth_n_peaks=1.0, bandwidth_scan_durations=0.01, max_data=100000):
-        params = [
-            {'data_type': MZ, 'bandwidth': bandwidth_mz},
-            {'data_type': INTENSITY, 'bandwidth': bandwidth_intensity},
-            {'data_type': RT, 'bandwidth': bandwidth_rt},
-            {'data_type': N_PEAKS, 'bandwidth': bandwidth_n_peaks},
-        ]
-
-        # not really kde, but we store it anyway for sampling later
-        self.file_scan_durations = data_source.get_scan_durations(filename)
-
-        # run kdes
-        for param in params:
-            data_type = param['data_type']
-
-            # get data
-            self.logger.debug('Retrieving %s values from %s' % (data_type, data_source))
-            min_intensity = self.min_ms1_intensity if ms_level == 1 else self.min_ms2_intensity
-            log = True if data_type == INTENSITY else False
-            X = data_source.get_data(data_type, filename, ms_level, min_intensity=min_intensity,
-                                     min_rt=self.min_rt, max_rt=self.max_rt, log=log, max_data=max_data)
-            self.logger.debug('Retrieved %s values' % str(X.shape))
-
-            # fit kde
-            self.logger.debug('Fitting kde on %s' % data_type)
-            bandwidth = param['bandwidth']
-            kde = KernelDensity(kernel=self.kernel, bandwidth=bandwidth).fit(X)
-            self.kdes[(data_type, ms_level)] = kde
-
-            # plot if necessary
-            if self.plot:
-                self._plot(kde, X, data_type, filename, bandwidth)
-
-    def sample(self, ms_level, n_sample):
-        """
-        Samples mz, rt and intensity values
-        :param ms_level: the ms level
-        :param n_sample: the number of samples to draw
-        :return:
-        """
-        mz_vals = self.kdes[(MZ, ms_level)].sample(n_sample)
-        intensity_vals = self.kdes[(INTENSITY, ms_level)].sample(n_sample)
-        rt_vals = self.kdes[(RT, ms_level)].sample(n_sample)
-        vals = np.concatenate((mz_vals, intensity_vals, rt_vals), axis=1)
-        return vals
-
-    def n_peaks(self, ms_level, n_sample):
-        return self.kdes[(N_PEAKS, ms_level)].sample(n_sample)
-
-    def scan_durations(self, previous_level, current_level, n_sample):
-        key = (previous_level, current_level, )
-        values = self.file_scan_durations[key]
-        return np.random.choice(values, size=n_sample)
-
-    def _plot(self, kde, X, data_type, filename, bandwidth):
-        if self.plot:
-            fname = 'All' if filename is None else filename
-            title = '%s density estimation for %s - bandwidth %.3f' % (data_type, fname, bandwidth)
-            X_plot = np.linspace(np.min(X), np.max(X), 1000)[:, np.newaxis]
-            log_dens = kde.score_samples(X_plot)
-            plt.figure()
-            plt.fill_between(X_plot[:, 0], np.exp(log_dens), alpha=0.5)
-            plt.plot(X[:, 0], np.full(X.shape[0], -0.01), '|k')
-            plt.title(title)
-            plt.show()
-
-
 class PeakDensityEstimator(LoggerMixin):
-    """A class to perform better kernel density estimation for peak data. Takes as input a DataSource class."""
+    """A class to perform kernel density estimation for peak data by fitting m/z, RT and intensity together.
+    Takes as input a DataSource class."""
 
     def __init__(self, min_ms1_intensity, min_ms2_intensity, min_rt, max_rt, plot=False):
         self.kdes = {}
@@ -363,71 +332,6 @@ class PeakDensityEstimator(LoggerMixin):
         self.max_rt = max_rt
         self.plot = plot
         self.file_scan_durations = None
-
-    def kde(self, data_source, filename, ms_level, bandwidth_mz_intensity=1.0,
-            bandwidth_rt=5.0, bandwidth_n_peaks=1.0, bandwidth_scan_durations=0.01, max_data=100000):
-        params = [
-            {'data_type': MZ_INTENSITY, 'bandwidth': bandwidth_mz_intensity},
-            {'data_type': RT, 'bandwidth': bandwidth_rt},
-            {'data_type': N_PEAKS, 'bandwidth': bandwidth_n_peaks}
-        ]
-
-        # not really kde, but we store it anyway for sampling later
-        self.file_scan_durations = data_source.get_scan_durations(filename)
-
-        for param in params:
-            data_type = param['data_type']
-
-            # get data
-            self.logger.debug('Retrieving %s values from %s' % (data_type, data_source))
-            min_intensity = self.min_ms1_intensity if ms_level == 1 else self.min_ms2_intensity
-            log = True if data_type == MZ_INTENSITY else False
-            X = data_source.get_data(data_type, filename, ms_level, min_intensity=min_intensity,
-                                     min_rt=self.min_rt, max_rt=self.max_rt, log=log, max_data=max_data)
-
-            # fit kde
-            bandwidth = param['bandwidth']
-            kde = KernelDensity(kernel=self.kernel, bandwidth=bandwidth).fit(X)
-            self.kdes[(data_type, ms_level)] = kde
-
-            # plot if necessary
-            self._plot(kde, X, data_type, filename, bandwidth)
-
-    def sample(self, ms_level, n_sample):
-        mz_intensity_vals = self.kdes[(MZ_INTENSITY, ms_level)].sample(n_sample)
-        rt_vals = self.kdes[(RT, ms_level)].sample(n_sample)
-        vals = np.concatenate((mz_intensity_vals, rt_vals), axis=1)
-        return vals
-
-    def n_peaks(self, ms_level, n_sample):
-        return self.kdes[(N_PEAKS, ms_level)].sample(n_sample)
-
-    def scan_durations(self, previous_level, current_level, n_sample):
-        key = (previous_level, current_level, )
-        values = self.file_scan_durations[key]
-        return np.random.choice(values, size=n_sample)
-
-    def _plot(self, kde, X, data_type, filename, bandwidth):
-        if self.plot:
-            if data_type == MZ_INTENSITY:
-                self.logger.debug('Plotting for %s not implemented' % MZ_INTENSITY)
-            else:
-                fname = 'All' if filename is None else filename
-                title = '%s density estimation for %s - bandwidth %.3f' % (data_type, fname, bandwidth)
-                X_plot = np.linspace(np.min(X), np.max(X), 1000)[:, np.newaxis]
-                log_dens = kde.score_samples(X_plot)
-                plt.figure()
-                plt.fill_between(X_plot[:, 0], np.exp(log_dens), alpha=0.5)
-                plt.plot(X[:, 0], np.full(X.shape[0], -0.01), '|k')
-                plt.title(title)
-                plt.show()
-
-
-class PeakDensityEstimator2(PeakDensityEstimator):
-    """A class to perform better kernel density estimation for peak data. Takes as input a DataSource class."""
-
-    def __init__(self, min_ms1_intensity, min_ms2_intensity, min_rt, max_rt, plot=False):
-        super().__init__(min_ms1_intensity, min_ms2_intensity, min_rt, max_rt, plot=plot)
 
     def kde(self, data_source, filename, ms_level, bandwidth_mz_intensity_rt=1.0,
             bandwidth_n_peaks=1.0, bandwidth_scan_durations=0.01, max_data=100000):
@@ -444,10 +348,14 @@ class PeakDensityEstimator2(PeakDensityEstimator):
 
             # get data
             self.logger.debug('Retrieving %s values from %s' % (data_type, data_source))
-            min_intensity = self.min_ms1_intensity if ms_level == 1 else self.min_ms2_intensity
-            log = True if data_type == MZ_INTENSITY_RT else False
-            X = data_source.get_data(data_type, filename, ms_level, min_intensity=min_intensity,
-                                     min_rt=self.min_rt, max_rt=self.max_rt, log=log, max_data=max_data)
+            if data_type == N_PEAKS:
+                X = data_source.get_n_peaks(filename, ms_level, min_intensity=min_intensity,
+                                            min_rt=self.min_rt, max_rt=self.max_rt)
+            else:
+                min_intensity = self.min_ms1_intensity if ms_level == 1 else self.min_ms2_intensity
+                log = True if data_type == MZ_INTENSITY_RT else False
+                X = data_source.get_data(data_type, filename, ms_level, min_intensity=min_intensity,
+                                         min_rt=self.min_rt, max_rt=self.max_rt, log=log, max_data=max_data)
 
             # fit kde
             bandwidth = param['bandwidth']
@@ -465,7 +373,7 @@ class PeakDensityEstimator2(PeakDensityEstimator):
         return self.kdes[(N_PEAKS, ms_level)].sample(n_sample)
 
     def scan_durations(self, previous_level, current_level, n_sample):
-        key = (previous_level, current_level, )
+        key = (previous_level, current_level,)
         values = self.file_scan_durations[key]
         return np.random.choice(values, size=n_sample)
 
