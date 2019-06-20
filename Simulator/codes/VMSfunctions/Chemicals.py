@@ -7,7 +7,7 @@ import scipy.stats
 import glob
 
 from VMSfunctions.ChineseRestaurantProcess import *
-from VMSfunctions.Common import *
+from VMSfunctions.Common import LoggerMixin, CHEM_DATA, POS_TRANSFORMATIONS, load_obj, takeClosest, save_obj
 
 
 class Compound(object):
