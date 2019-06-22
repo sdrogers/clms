@@ -364,9 +364,12 @@ class ChemicalCreator(LoggerMixin):
             return self._get_unknown_msn(ms_level, ROI, sampled_peak)
 
     def _get_known_ms1(self, formula, ROI, sampled_peak):  # fix this
+        ## from sampled_peak.rt (XCMS output), we get the point where maximum intensity occurs
+        ## so when convering ROI to chemicals, we want to adjust the RT to align it with the point where max intensity occurs
         rt = sampled_peak.rt
         min2mid_rt_ROI = list(ROI.chromatogram.rts[np.where(ROI.chromatogram.intensities == 1)])[0]
         adjusted_rt = rt - min2mid_rt_ROI
+
         intensity = sampled_peak.intensity
         formula = Formula(formula)
         isotopes = Isotopes(formula)
@@ -376,6 +379,8 @@ class ChemicalCreator(LoggerMixin):
     def _get_unknown_msn(self, ms_level, ROI, sampled_peak, parent=None):  # fix this
         if ms_level == 1:
             mz = sampled_peak.mz
+            ## from sampled_peak.rt (XCMS output), we get the point where maximum intensity occurs
+            ## so when convering ROI to chemicals, we want to adjust the RT to align it with the point where max intensity occurs
             rt = sampled_peak.rt
             min2mid_rt_ROI = list(ROI.chromatogram.rts[np.where(ROI.chromatogram.intensities == 1)])[0]
             adjusted_rt = rt - min2mid_rt_ROI
