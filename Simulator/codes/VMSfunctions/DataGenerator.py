@@ -115,6 +115,8 @@ class DataSource(LoggerMixin):
             if data_type == SCAN_DURATION:
                 X = self.get_scan_durations(file_name)
                 self.plot_histogram(X, data_type)
+            elif data_type == N_PEAKS:
+                X = self.get_n_peaks(file_name, ms_level, min_rt=min_rt, max_rt=max_rt)
             else:
                 X = self.get_data(data_type, file_name, ms_level, min_rt=min_rt, max_rt=max_rt, max_data=max_data)
                 if data_type == INTENSITY:
@@ -192,7 +194,7 @@ class DataSource(LoggerMixin):
             elif data_type == INTENSITY:
                 X = df['maxo'].values
             elif data_type == MZ_INTENSITY_RT:
-                X = df[['mz', 'maxo', 'rtmin']].values
+                X = df[['mz', 'maxo', 'rt']].values
 
         else:  # else we get the values by reading from the scans in mzML files directly
             self.logger.info('Using values from scans')
