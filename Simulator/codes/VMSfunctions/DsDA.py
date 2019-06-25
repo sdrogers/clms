@@ -54,9 +54,9 @@ def fragmentation_performance_chemicals(controller_directory, min_acceptable_int
 
 
 def fragmentation_performance_aligned(param_dict):
-    controller = param_dict["controller"]
+    controller = load_obj(param_dict["controller_directory"])
     min_acceptable_intensity = param_dict["min_acceptable_intensity"]
-    aligned_chemicals = param_dict["aligned_chemicals"]
+    aligned_chemicals = pd.read_csv(param_dict["aligned_chemicals_location"])
     n_chemicals_aligned = len(aligned_chemicals["mzmed"])
     chemicals_found = 0
     for aligned_index in range(n_chemicals_aligned):
@@ -82,9 +82,8 @@ def create_frag_dicts(controller_directory, aligned_chemicals_location, min_acce
     file_names = glob.glob(controller_file_spec)
     params = []
     for controller_index in range(len(file_names)):
-        controller = load_obj(file_names[controller_index])
         params.append({
-            'controller_location': controller,
+            'controller_directory': controller_directory + file_names[controller_index],
             'min_acceptable_intensity': min_acceptable_intensity,
             'aligned_chemicals_location': aligned_chemicals_location
         })
