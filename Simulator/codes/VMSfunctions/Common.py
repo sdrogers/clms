@@ -5,6 +5,7 @@ import os
 import pathlib
 import pickle
 from bisect import bisect_left
+import numpy as np
 
 # some useful constants
 MZ = 'mz'
@@ -135,3 +136,26 @@ class LoggerMixin():
         logging.basicConfig(level=logging.getLogger().level, format=format)
         logger = logging.getLogger(name)
         return logger
+
+
+def get_rt(spectrum):
+    '''
+    Extracts RT value from a pymzml spectrum object
+    :param spectrum: a pymzml spectrum object
+    :return: the retention time (in seconds)
+    '''
+    rt, units = spectrum.scan_time
+    if units == 'minute':
+        rt *= 60.0
+    return rt
+
+
+def find_nearest_index_in_array(array, value):
+    '''
+    Finds index in array where the value is the nearest
+    :param array:
+    :param value:
+    :return:
+    '''
+    idx = (np.abs(array - value)).argmin()
+    return idx

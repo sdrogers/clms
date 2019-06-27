@@ -517,3 +517,18 @@ class MultiSampleCreator(LoggerMixin):
         if noisy_intensity < 0:
             print("Warning: Negative Intensities have been created")
         return noisy_intensity
+
+
+def get_absolute_intensity(chem, query_rt):
+    return chem.max_intensity * chem.chromatogram.get_relative_intensity(query_rt - chem.rt)
+
+
+def get_key(chem):
+    '''
+    Turns a chemical object into (mz, rt, intensity) tuples for equal comparison
+    TODO: maybe we should override __eq__ of Chemical instead?
+    :param chem: A chemical object
+    :return: a tuple of the three values
+    '''
+    return (tuple(chem.isotopes), chem.rt, chem.max_intensity)
+

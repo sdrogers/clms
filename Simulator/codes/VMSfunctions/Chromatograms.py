@@ -74,7 +74,7 @@ class EmpiricalChromatogram(Chromatogram):
         which_rt_below = pos[-1]
 
         # take the min index of self.rts larger than query_rt
-        pos = np.where(self.rts >= query_rt)[0]
+        pos = np.where(self.rts > query_rt)[0]
         which_rt_above = pos[0]
         return [which_rt_below, which_rt_above]
 
