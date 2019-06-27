@@ -6,7 +6,7 @@ import pandas as pd
 import pylab as plt
 import seaborn as sns
 
-from VMSfunctions.Chemicals import UnknownChemical
+from VMSfunctions.Chemicals import UnknownChemical, get_absolute_intensity, get_key
 from VMSfunctions.Common import load_obj, PROTON_MASS
 
 
@@ -187,35 +187,20 @@ def load_controllers(results_dir, Ns, rt_tols):
     return controllers
 
 
-def get_matched_chemicals_scenario_1(experiment_name, experiment_out_dir,
-                                     experiment_to_filename, P_peaks_df,
+def update_matched_chemicals_scenario_1(dataset, fullscan_filename, P_peaks_df,
                                      matching_mz_tol, matching_rt_tol):
-    # load the list of chemicals that we put into the simulator for each experiment
-    print('Processing %s' % experiment_out_dir)
-    dataset = load_obj(os.path.join(experiment_out_dir, 'dataset.p'))
-
-    # load the list of xcms-picked peaks
-    full_scan_filename = experiment_to_filename[experiment_name]
-    detected_ms1 = df_to_chemicals(P_peaks_df, full_scan_filename)
-
     # match with xcms peak-picked ms1 data
-    matches = match(dataset, detected_ms1, matching_mz_tol, matching_rt_tol, verbose=False)
+    detected_ms1 = df_to_chemicals(P_peaks_df, fullscan_filename)
+    matches_fullscan = match(dataset, detected_ms1, matching_mz_tol, matching_rt_tol, verbose=False)
 
-    # check if matched
-    found = 0
-    for chem in dataset:
-        if chem in matches:
-            chem.found_in_fullscan = True
-            found += 1
-        else:
-            chem.found_in_fullscan = False
-    print('Matched', found, '/', len(dataset), 'in fullscan ms1 data')
+    # check if matched and set a flag to indicate that
+    update_matched_status(dataset, matches_fullscan, None)
     return dataset
 
 
-def compute_performance_scenario_1(controller, dataset, min_ms1_intensity):
-    ms_level = 2
-    chem_to_frag_events = get_frag_events(controller, ms_level)
+def compute_performance_scenario_1(controller, dataset, min_ms1_intensity, chem_to_frag_events=None):
+    if chem_to_frag_events is None: # read MS2 fragmentation events from pickled controller
+        chem_to_frag_events = get_frag_events(controller, 2)
 
     # positive instances are ground truth MS1 peaks found by XCMS
     # negative instances are chemicals that cannot be matched to XCMS output
@@ -241,24 +226,15 @@ def compute_performance_scenario_1(controller, dataset, min_ms1_intensity):
     tp = len(tp)
     fp = len(fp)
     fn = len(fn)
-    prec = tp / (tp + fp)
-    rec = tp / (tp + fn)
-    f1 = (2 * prec * rec) / (prec + rec)
-    prec, rec, f1
+    prec, rec, f1 = compute_pref_rec_f1(tp, fp, fn)
     return tp, fp, fn, prec, rec, f1
 
 
-def get_matched_chemicals_scenario_2(experiment_name, experiment_out_dir,
-                                     experiment_to_filename, fragfile_filename,
+def update_matched_chemicals_scenario_2(dataset, fullscan_filename, fragfile_filename,
                                      P_peaks_df, Q_peaks_df,
                                      matching_mz_tol, matching_rt_tol):
-    # load the list of chemicals that we put into the simulator for each experiment
-    print('Processing %s' % experiment_out_dir)
-    dataset = load_obj(os.path.join(experiment_out_dir, 'dataset.p'))
-
     # load the list of xcms-picked peaks
-    full_scan_filename = experiment_to_filename[experiment_name]
-    detected_from_fullscan = df_to_chemicals(P_peaks_df, full_scan_filename)
+    detected_from_fullscan = df_to_chemicals(P_peaks_df, fullscan_filename)
     detected_from_fragfile = df_to_chemicals(Q_peaks_df, fragfile_filename)
 
     # match with xcms peak-picked ms1 data from fullscan file
@@ -267,34 +243,13 @@ def get_matched_chemicals_scenario_2(experiment_name, experiment_out_dir,
     # match with xcms peak-picked ms1 data from fragmentation file
     matches_fragfile = match(dataset, detected_from_fragfile, matching_mz_tol, matching_rt_tol, verbose=False)
 
-    # check if matched
-    found_in_fullscan = 0
-    found_in_fragfile = 0
-
-    for chem in dataset:
-
-        # check if a match is found in fullscan mzML
-        if chem in matches_fullscan:
-            chem.found_in_fullscan = True
-            found_in_fullscan += 1
-        else:
-            chem.found_in_fullscan = False
-
-        # check if a match is found in fragmentation mzML
-        if chem in matches_fragfile:
-            chem.found_in_fragfile = True
-            found_in_fragfile += 1
-        else:
-            chem.found_in_fragfile = False
-
-    print('Matched %d/%d in fullscan data, %d/%d in fragmentation data' % (found_in_fullscan, len(dataset),
-                                                                           found_in_fragfile, len(dataset)))
-    return dataset
+    # check if matched and set a flag to indicate that
+    update_matched_status(dataset, matches_fullscan, matches_fragfile)
 
 
-def compute_performance_scenario_2(controller, dataset, min_ms1_intensity):
-    ms_level = 2
-    chem_to_frag_events = get_frag_events(controller, ms_level)
+def compute_performance_scenario_2(controller, dataset, min_ms1_intensity, chem_to_frag_events=None):
+    if chem_to_frag_events is None: # read MS2 fragmentation events from pickled controller
+        chem_to_frag_events = get_frag_events(controller, 2)
 
     # True positive: a peak that is fragmented above the minimum MS1 intensity and is picked by XCMS from
     # the MS1 information in the DDA file and is picked in the fullscan file.
@@ -315,20 +270,17 @@ def compute_performance_scenario_2(controller, dataset, min_ms1_intensity):
     found_in_fullscan = list(filter(lambda x: x.found_in_fullscan, dataset))
     fn = len(found_in_fullscan) - tp
 
-    prec = tp / (tp + fp)
-    rec = tp / (tp + fn)
-    f1 = (2 * prec * rec) / (prec + rec)
-    prec, rec, f1
+    prec, rec, f1 = compute_pref_rec_f1(tp, fp, fn)
     return tp, fp, fn, prec, rec, f1
 
 
-def get_key(chem):
-    # turn a chem into (mz, rt, intensity) for equal comparison
-    return (tuple(chem.isotopes), chem.rt, chem.max_intensity)
-
-
 def get_frag_events(controller, ms_level):
-    # get the fragmentation events for all chemicals for an ms level
+    '''
+    Gets the fragmentation events for all chemicals for an ms level from the controller
+    :param controller: A Top-N controller object
+    :param ms_level: The MS-level (usually 2)
+    :return: A dictionary where keys are chemicals (from get_key() above) and values are a list of fragmentation events
+    '''
     filtered_frag_events = list(filter(lambda x: x.ms_level == ms_level, controller.mass_spec.fragmentation_events))
     chem_to_frag_events = defaultdict(list)
     for frag_event in filtered_frag_events:
@@ -337,12 +289,15 @@ def get_frag_events(controller, ms_level):
     return dict(chem_to_frag_events)
 
 
-def get_absolute_intensity(chem, query_rt):
-    return chem.max_intensity * chem.chromatogram.get_relative_intensity(query_rt - chem.rt)
-
-
 def count_frag_events(key, chem_to_frag_events, min_ms1_intensity):
-    # count how many good and bad fragmentation events for each chemical (key)
+    '''
+    Counts how many good and bad fragmentation events for each chemical (key).
+    Good fragmentation events are defined as fragmentation events that occur when at the time of fragmentation,
+    the chemical MS1 intensity is above the min_ms1_intensity threshold.
+    :param key: the chemical to count (from get_key() above)
+    :param chem_to_frag_events: a dictionary of chemicals to frag events (from get_frag_events above())
+    :return: a tuple of good and bad fragmentation event counts
+    '''
     frag_events = chem_to_frag_events[key]
     good_count = 0
     bad_count = 0
@@ -372,3 +327,39 @@ def get_chem_frag_counts(chem_list, chem_to_frag_events, min_ms1_intensity):
             'bad': bad_count
         }
     return results
+
+
+def update_matched_status(dataset, matches_fullscan, matches_fragfile):
+    '''
+    Update a boolean flag in the Chemical object that tells us if it is found in fullscan or fragmentation data
+    :param dataset: a list of Chemicals
+    :param matches_fullscan: the result of matching Chemicals in dataset to fullscan file
+    :param matches_fragfile: the result of matching Chemicals in dataset to fragmentation file
+    :return: None, but the Chemical objects in dataset is modified
+    '''
+    found_in_fullscan = 0
+    found_in_fragfile = 0
+    for chem in dataset:
+        if matches_fullscan is not None: # check if a match is found in fullscan mzML
+            if chem in matches_fullscan:
+                chem.found_in_fullscan = True
+                found_in_fullscan += 1
+            else:
+                chem.found_in_fullscan = False
+
+        if matches_fragfile is not None: # check if a match is found in fragmentation mzML
+            if chem in matches_fragfile:
+                chem.found_in_fragfile = True
+                found_in_fragfile += 1
+            else:
+                chem.found_in_fragfile = False
+
+    print('Matched %d/%d in fullscan data, %d/%d in fragmentation data' % (found_in_fullscan, len(dataset),
+                                                                           found_in_fragfile, len(dataset)))
+
+def compute_pref_rec_f1(tp, fp, fn):
+    prec = tp / (tp + fp)
+    rec = tp / (tp + fn)
+    f1 = (2 * prec * rec) / (prec + rec)
+    return prec, rec, f1
+

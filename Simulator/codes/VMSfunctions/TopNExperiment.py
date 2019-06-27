@@ -1,7 +1,50 @@
 from VMSfunctions.Controller import *
+from VMSfunctions.Roi import *
+from VMSfunctions.Common import *
+from VMSfunctions.Chemicals import get_absolute_intensity, get_key
+import pymzml
 
+
+########################################################################################################################
+# Data extraction methods
+########################################################################################################################
+
+def get_chemicals(mzML_file, mz_tol, min_ms1_intensity, start_rt, stop_rt, min_length=1):
+    '''
+    Extract ROI from an mzML file and turn them into UnknownChemical objects
+    :param mzML_file: input mzML file
+    :param mz_tol: mz tolerance for ROI extraction
+    :param min_ms1_intensity: ROI will only be kept if it has one point above this threshold
+    :param start_rt: start RT to extract ROI
+    :param stop_rt: end RT to extract ROI
+    :return: a list of UnknownChemical objects
+    '''
+    min_intensity = 0
+    good_roi, junk = make_roi(mzML_file, mz_tol=mz_tol, mz_units='ppm', min_length=min_length,
+                              min_intensity=min_intensity, start_rt=start_rt, stop_rt=stop_rt)
+
+    # keep ROI that have at least one point above the minimum to fragment threshold
+    keep = []
+    for roi in good_roi:
+        if np.count_nonzero(np.array(roi.intensity_list) > min_ms1_intensity) > 0:
+            keep.append(roi)
+
+    ps = None # unused
+    rtcc = RoiToChemicalCreator(ps, keep)
+    chemicals = np.array(rtcc.chemicals)
+    return chemicals
+
+
+########################################################################################################################
+# Codes to set up experiments
+########################################################################################################################
 
 def run_experiment(param):
+    '''
+    Runs a Top-N experiment
+    :param param: the experimental parameters
+    :return: the analysis name that has been successfully ran
+    '''
     analysis_name = param['analysis_name']
     mzml_out = param['mzml_out']
     pickle_out = param['pickle_out']
@@ -19,6 +62,11 @@ def run_experiment(param):
 
 
 def run_parallel_experiment(params):
+    '''
+    Runs experiments in parallel using iParallel library
+    :param params: the experimental parameter
+    :return: the analysis name
+    '''
     import ipyparallel as ipp
     rc = ipp.Client()
     dview = rc[:]  # use all engines​
@@ -31,6 +79,13 @@ def run_parallel_experiment(params):
 
 
 def run_serial_experiment(param, i, total):
+    '''
+    Runs experiments serially
+    :param param: the experimental parameter
+    :param i: current index
+    :param total: total number of experiments
+    :return: None
+    '''
     print('Processing \t%d/%d\t%s' % (i + 1, total, param['analysis_name']))
     run_experiment(param)
 
@@ -38,8 +93,24 @@ def run_serial_experiment(param, i, total):
 def get_params(experiment_name, Ns, rt_tols, mz_tol, isolation_window, ionisation_mode, data, density,
                min_ms1_intensity, min_rt, max_rt,
                out_dir, pbar):
+    '''
+    Creates a list of experimental parameters
+    :param experiment_name: current experimental name
+    :param Ns: possible values of N in top-N to test
+    :param rt_tols: possible values of DEW to test
+    :param mz_tol: Top-N controller parameter: the m/z window (ppm) to prevent the same precursor ion to be fragmented again
+    :param isolation_window: Top-N controller parameter: the m/z window (ppm) to prevent the same precursor ion to be fragmented again
+    :param ionisation_mode: Top-N controller parameter: either positive or negative
+    :param data: chemicals to fragment
+    :param density: trained densities to sample values during simulatin
+    :param min_ms1_intensity: Top-N controller parameter: minimum ms1 intensity to fragment
+    :param min_rt: start RT to simulate
+    :param max_rt: end RT to simulate
+    :param out_dir: output directory
+    :param pbar: progress bar to update
+    :return: a list of parameters
+    '''
     create_if_not_exist(out_dir)
-
     print('N =', Ns)
     print('rt_tol =', rt_tols)
     params = []
@@ -67,100 +138,151 @@ def get_params(experiment_name, Ns, rt_tols, mz_tol, isolation_window, ionisatio
     print('len(params) =', len(params))
     return params
 
+########################################################################################################################
+# Extract precursor information from mzML file
+########################################################################################################################
 
-def get_key(chem):
-    # turn a chem into (mz, rt, intensity) for equal comparison
-    return (tuple(chem.isotopes), chem.rt, chem.max_intensity)
+
+def get_peaks(spectrum):
+    mzs = spectrum.mz
+    rts = [get_rt(spectrum)] * len(mzs)
+    intensities = spectrum.i
+    peaklist = np.stack([mzs, rts, intensities], axis=1)
+    return peaklist
 
 
-def get_frag_events(controller, ms_level):
-    # get the fragmentation events for all chemicals for an ms level
-    filtered_frag_events = list(filter(lambda x: x.ms_level == ms_level, controller.mass_spec.fragmentation_events))
+def find_precursor_ms1(precursor, last_ms1_peaklist, last_ms1_scan_no, isolation_window):
+    precursor_mz = precursor['mz']
+    precursor_intensity = precursor['i']
+
+    # find mz in the last ms1 scan that fall within isolation window
+    mzs = last_ms1_peaklist[:, 0]
+    diffs = abs(mzs - precursor_mz) < isolation_window
+    idx = np.nonzero(diffs)[0]
+
+    if len(idx) == 0:  # should never happen!?
+        raise ValueError('Cannot find precursor peak (%f, %f) in the last ms1 scan %d' %
+                         (precursor_mz, precursor_intensity, last_ms1_scan_no))
+
+    elif len(idx) == 1:  # only one is found
+        selected_ms1_idx = idx[0]
+
+    else:  # found multilple possible ms1 peak, select the largest intensity
+        possible_ms1 = last_ms1_peaklist[idx, :]
+        possible_intensities = possible_ms1[:, 2]
+        closest = np.argmax(possible_intensities)
+        selected_ms1_idx = idx[closest]
+
+    selected_ms1 = last_ms1_peaklist[selected_ms1_idx, :]
+    return selected_ms1, selected_ms1_idx
+
+
+def find_precursor_peaks(precursor, last_ms1_peaklist, last_ms1_scan_no, isolation_window=0.5):
+    selected_ms1, selected_ms1_idx = find_precursor_ms1(precursor, last_ms1_peaklist,
+                                                        last_ms1_scan_no, isolation_window)
+    selected_ms1_mz = selected_ms1[0]
+    selected_ms1_rt = selected_ms1[1]
+    selected_ms1_intensity = selected_ms1[2]
+    res = [last_ms1_scan_no, selected_ms1_rt, selected_ms1_mz, selected_ms1_intensity]
+    return res
+
+
+def get_precursor_info(fragfile):
+    run = pymzml.run.Reader(fragfile, obo_version='4.0.1',
+                            MS1_Precision=5e-6,
+                            extraAccessions=[('MS:1000016', ['value', 'unitName'])])
+
+    last_ms1_peaklist = None
+    last_ms1_scan_no = 0
+    isolation_window = 0.5  # Dalton
+    data = []
+    for scan_no, scan in enumerate(run):
+        if scan.ms_level == 1:  # save the last ms1 scan that we've seen
+            last_ms1_peaklist = get_peaks(scan)
+            last_ms1_scan_no = scan_no
+
+        # TODO: it's better to use the "isolation window target m/z" field in the mzML file for matching
+        precursors = scan.selected_precursors
+        if len(precursors) > 0:
+            assert len(precursors) == 1  # assume exactly 1 precursor peak for each ms2 scan
+            precursor = precursors[0]
+
+            try:
+                scan_rt = get_rt(scan)
+                precursor_mz = precursor['mz']
+                precursor_intensity = precursor['i']
+                res = find_precursor_peaks(precursor, last_ms1_peaklist, last_ms1_scan_no,
+                                           isolation_window=isolation_window)
+                row = [scan_no, scan_rt, precursor_mz, precursor_intensity]
+                row.extend(res)
+                data.append(row)
+            except ValueError as e:
+                print(e)
+            except KeyError as e:
+                continue  # sometimes we can't find the intensity value precursor['i'] in precursors
+
+    columns = ['ms2_scan_id', 'ms2_scan_rt', 'ms2_precursor_mz', 'ms2_precursor_intensity',
+               'ms1_scan_id', 'ms1_scan_rt', 'ms1_mz', 'ms1_intensity']
+    df = pd.DataFrame(data, columns=columns)
+
+    # select only rows where we are sure of the matching
+    df['intensity_diff'] = np.abs(df['ms2_precursor_intensity'] - df['ms1_intensity'])
+    idx = (df['intensity_diff'] == 0)
+    ms1_df = df[idx]
+    return ms1_df
+
+
+def _get_chem_indices(query_mz, query_rt, min_mzs, max_mzs, min_rts, max_rts):
+    rtmin_check = min_rts < query_rt
+    rtmax_check = query_rt < max_rts
+    mzmin_check = min_mzs < query_mz
+    mzmax_check = query_mz < max_mzs
+    idx = np.nonzero(rtmin_check & rtmax_check & mzmin_check & mzmax_check)[0]
+    return idx
+
+
+def get_chem_to_frag_events(chemicals, ms1_df):
+    # used for searching later
+    min_rts = np.array([min(chem.chromatogram.raw_rts) for chem in chemicals])
+    max_rts = np.array([max(chem.chromatogram.raw_rts) for chem in chemicals])
+    min_mzs = np.array([min(chem.chromatogram.raw_mzs) for chem in chemicals])
+    max_mzs = np.array([max(chem.chromatogram.raw_mzs) for chem in chemicals])
+
+    # loop over each fragmentation event in ms1_df, attempt to match it to chemicals
     chem_to_frag_events = defaultdict(list)
-    for frag_event in filtered_frag_events:
-        key = get_key(frag_event.chem)
-        chem_to_frag_events[key].append(frag_event)
-    return dict(chem_to_frag_events)
+    chem_dict = {}
+    for idx, row in ms1_df.iterrows():
+        query_rt = row['ms1_scan_rt']
+        query_mz = row['ms1_mz']
+        query_intensity = row['ms1_intensity']
+        scan_id = row['ms2_scan_id']
+
+        chem = None
+        idx = _get_chem_indices(query_mz, query_rt, min_mzs, max_mzs, min_rts, max_rts)
+        if len(idx) == 1: # single match
+            chem = chemicals[idx][0]
+
+        elif len(idx) > 1: # multiple matches, find the closest in intensity to query_intensity at the time of fragmentation
+            matches = chemicals[idx]
+            possible_intensities = np.array([get_absolute_intensity(chem, query_rt) for chem in matches])
+            closest = find_nearest_index_in_array(possible_intensities, query_intensity)
+            chem = matches[closest]
+
+        # create frag event for the given chem
+        if chem is not None:
+            ms_level = 2
+            peaks = [] # we don't know which ms2 peaks are linked to this chem object
+            key = get_key(chem)
+            chem_dict[key] = chem
+            frag_event = FragmentationEvent(chem, query_rt, ms_level, peaks, scan_id)
+            chem_to_frag_events[key].append(frag_event)
+    return chem_to_frag_events
 
 
-def count_frag_events(key, chem_to_frag_events):
-    # count how many good and bad fragmentation events for each chemical (key)
-    frag_events = chem_to_frag_events[key]
-    good_count = 0
-    bad_count = 0
-    for frag_event in frag_events:
-        chem = frag_event.chem
-        rt_match = chem.chromatogram._rt_match(frag_event.query_rt - chem.rt)
-        if rt_match:
-            good_count += 1
-        else:
-            bad_count += 1
-    return good_count, bad_count
-
-
-def get_chem_frag_counts(chem_list, chem_to_frag_events):
-    # get the count of good/bad fragmentation events for all chemicals in chem_list
-    results = {}
-    for i in range(len(chem_list)):
-        chem = chem_list[i]
-        key = get_key(chem)
-        try:
-            good_count, bad_count = count_frag_events(key, chem_to_frag_events)
-        except KeyError:
-            good_count = 0
-            bad_count = 0
-        results[chem] = {
-            'good': good_count,
-            'bad': bad_count
-        }
-    return results
-
-
-def compute_performance(controller, dataset):
-    ms_level = 2
-    chem_to_frag_events = get_frag_events(controller, ms_level)
-    positives = list(filter(lambda x: x.type == 'data', dataset))
-    negatives = list(filter(lambda x: x.type == 'noise', dataset))
-    positives_count = get_chem_frag_counts(positives, chem_to_frag_events)
-    negatives_count = get_chem_frag_counts(negatives, chem_to_frag_events)
-
-    # count the following:
-    # true positive = is an xcms peak (positive) and is fragmented within the chemical's elution time
-    # false positive = is not an xcms peak (negative) and is fragmented within the chemical's elution time
-    # false negative = is an xcms peak (positive) and is not fragmented within the chemical's elution time
-    tp = len([chem for chem in positives if positives_count[chem]['good'] > 0])
-    fp = len([chem for chem in negatives if negatives_count[chem]['good'] > 0])
-    fn = len([chem for chem in positives if positives_count[chem]['good'] == 0])
-
-    prec = tp / (tp + fp)
-    rec = tp / (tp + fn)
-    f1 = (2 * prec * rec) / (prec + rec)
-    prec, rec, f1
-    return tp, fp, fn, prec, rec, f1
-
-
-def load_controller(results_dir, experiment_name, N, rt_tol):
-    analysis_name = 'experiment_%s_N_%d_rttol_%d' % (experiment_name, N, rt_tol)
-    pickle_in = '%s/%s.p' % (results_dir, analysis_name)
-    print('Loading %s' % analysis_name)
-    try:
-        controller = load_obj(pickle_in)
-    except FileNotFoundError:
-        controller = None
-    return controller
-
-
-def load_controllers(results_dir, Ns, rt_tols):
-    controllers = []
-    for N in Ns:
-        for rt_tol in rt_tols:
-            controller = load_controller(results_dir, N, rt_tol)
-            if controller is not None:
-                controllers.append(controller)
-    return controllers
-
-
-def make_plot(df, X, Y, title, ylabel):
-    df.plot.line(x=X, y=Y)
-    plt.title(title)
-    plt.ylabel(ylabel)
+def get_N_rt_tol_from_qcb_filename(fragfile):
+    base = os.path.basename(fragfile)
+    base = os.path.splitext(base)[0]
+    tokens = base.split('_')
+    N = int(tokens[1][1:])
+    rt_tol = int(tokens[2][3:])
+    return N, rt_tol
