@@ -188,20 +188,19 @@ def load_controllers(results_dir, Ns, rt_tols):
     return controllers
 
 
-def update_matched_chemicals_scenario_1(dataset, fullscan_filename, P_peaks_df,
-                                     matching_mz_tol, matching_rt_tol):
+def compute_performance_scenario_1(controller, dataset, min_ms1_intensity,
+                                   fullscan_filename, P_peaks_df,
+                                   matching_mz_tol, matching_rt_tol,
+                                   chem_to_frag_events=None):
+    if chem_to_frag_events is None:  # read MS2 fragmentation events from pickled controller
+        chem_to_frag_events = get_frag_events(controller, 2)
+
     # match with xcms peak-picked ms1 data
     detected_ms1 = df_to_chemicals(P_peaks_df, fullscan_filename)
     matches_fullscan = match(dataset, detected_ms1, matching_mz_tol, matching_rt_tol, verbose=False)
 
     # check if matched and set a flag to indicate that
     update_matched_status(dataset, matches_fullscan, None)
-    return dataset
-
-
-def compute_performance_scenario_1(controller, dataset, min_ms1_intensity, chem_to_frag_events=None):
-    if chem_to_frag_events is None: # read MS2 fragmentation events from pickled controller
-        chem_to_frag_events = get_frag_events(controller, 2)
 
     # positive instances are ground truth MS1 peaks found by XCMS
     # negative instances are chemicals that cannot be matched to XCMS output
@@ -231,9 +230,62 @@ def compute_performance_scenario_1(controller, dataset, min_ms1_intensity, chem_
     return tp, fp, fn, prec, rec, f1
 
 
-def update_matched_chemicals_scenario_2(dataset, fullscan_filename, fragfile_filename,
-                                     P_peaks_df, Q_peaks_df,
-                                     matching_mz_tol, matching_rt_tol):
+# def compute_performance_scenario_1(controller, chemicals, min_ms1_intensity,
+#                                    fullscan_filename, P_peaks_df,
+#                                    matching_mz_tol, matching_rt_tol,
+#                                    chem_to_frag_events=None):
+
+#     if chem_to_frag_events is None: # read MS2 fragmentation events from pickled controller
+#         chem_to_frag_events = get_frag_events(controller, 2)
+
+#     # match xcms picked ms1 peaks to fragmentation peaks
+#     detected_ms1 = df_to_chemicals(P_peaks_df, fullscan_filename)
+#     matches_fullscan = match(detected_ms1, chemicals, matching_mz_tol, matching_rt_tol, verbose=False)
+#     matched_frags = set(matches_fullscan.values())
+#     print('%d/%d %d/%d' % (len(matches_fullscan), len(detected_ms1), len(matched_frags), len(chemicals)))
+
+#     # ms1 peaks that are also fragmented
+#     positives = []
+#     for ms1_peak in matches_fullscan:
+#         frag_peak = matches_fullscan[ms1_peak]
+#         frag_events = chem_to_frag_events[frag_peak]
+#         if len(frag_events) > 0:
+#             positives.append(frag_peak)
+
+#     # fragmentation peaks that are not in ms1 peaks
+#     negatives = []
+#     for frag_peak in chemicals:
+#         if frag_peak not in matched_frags:
+#             frag_events = chem_to_frag_events[frag_peak]
+#             if len(frag_events) > 0:
+#                 negatives.append(frag_peak)
+
+#     positives_count = get_chem_frag_counts(positives, chem_to_frag_events, min_ms1_intensity)
+#     negatives_count = get_chem_frag_counts(negatives, chem_to_frag_events, min_ms1_intensity)
+
+#     # peaks from ground truth (found in full-scan files) that are fragmented above the minimum intensity threshold
+#     tp = [chem for chem in positives if positives_count[chem]['good'] > 0 and positives_count[chem]['bad'] == 0]
+#     tp = len(tp)
+
+#     # peaks from ground truth that are not fragmented + peaks from ground truth that are fragmented below the minimum intensity threshold.
+#     fp = len(detected_ms1) - tp
+
+#     # peaks not from ground truth that are fragmented above the minimum intensity threshold.
+#     fn = [chem for chem in negatives if negatives_count[chem]['good'] > 0 and negatives_count[chem]['bad'] == 0]
+#     fn = len(fn)
+
+#     prec, rec, f1 = compute_pref_rec_f1(tp, fp, fn)
+#     return tp, fp, fn, prec, rec, f1
+
+
+def compute_performance_scenario_2(controller, dataset, min_ms1_intensity,
+                                   fullscan_filename, fragfile_filename,
+                                   P_peaks_df, Q_peaks_df,
+                                   matching_mz_tol, matching_rt_tol,
+                                   chem_to_frag_events=None):
+    if chem_to_frag_events is None:  # read MS2 fragmentation events from pickled controller
+        chem_to_frag_events = get_frag_events(controller, 2)
+
     # load the list of xcms-picked peaks
     detected_from_fullscan = df_to_chemicals(P_peaks_df, fullscan_filename)
     detected_from_fragfile = df_to_chemicals(Q_peaks_df, fragfile_filename)
@@ -246,11 +298,6 @@ def update_matched_chemicals_scenario_2(dataset, fullscan_filename, fragfile_fil
 
     # check if matched and set a flag to indicate that
     update_matched_status(dataset, matches_fullscan, matches_fragfile)
-
-
-def compute_performance_scenario_2(controller, dataset, min_ms1_intensity, chem_to_frag_events=None):
-    if chem_to_frag_events is None: # read MS2 fragmentation events from pickled controller
-        chem_to_frag_events = get_frag_events(controller, 2)
 
     # True positive: a peak that is fragmented above the minimum MS1 intensity and is picked by XCMS from
     # the MS1 information in the DDA file and is picked in the fullscan file.
@@ -280,26 +327,26 @@ def get_frag_events(controller, ms_level):
     Gets the fragmentation events for all chemicals for an ms level from the controller
     :param controller: A Top-N controller object
     :param ms_level: The MS-level (usually 2)
-    :return: A dictionary where keys are chemicals (from get_key() above) and values are a list of fragmentation events
+    :return: A dictionary where keys are chemicals and values are a list of fragmentation events
     '''
     filtered_frag_events = list(filter(lambda x: x.ms_level == ms_level, controller.mass_spec.fragmentation_events))
     chem_to_frag_events = defaultdict(list)
     for frag_event in filtered_frag_events:
-        key = get_key(frag_event.chem)
+        key = frag_event.chem
         chem_to_frag_events[key].append(frag_event)
     return dict(chem_to_frag_events)
 
 
-def count_frag_events(key, chem_to_frag_events, min_ms1_intensity):
+def count_frag_events(chem, chem_to_frag_events, min_ms1_intensity):
     '''
     Counts how many good and bad fragmentation events for each chemical (key).
     Good fragmentation events are defined as fragmentation events that occur when at the time of fragmentation,
     the chemical MS1 intensity is above the min_ms1_intensity threshold.
-    :param key: the chemical to count (from get_key() above)
+    :param chem: the chemical to count
     :param chem_to_frag_events: a dictionary of chemicals to frag events (from get_frag_events above())
     :return: a tuple of good and bad fragmentation event counts
     '''
-    frag_events = chem_to_frag_events[key]
+    frag_events = chem_to_frag_events[chem]
     good_count = 0
     bad_count = 0
     for frag_event in frag_events:
@@ -317,9 +364,8 @@ def get_chem_frag_counts(chem_list, chem_to_frag_events, min_ms1_intensity):
     results = {}
     for i in range(len(chem_list)):
         chem = chem_list[i]
-        key = get_key(chem)
         try:
-            good_count, bad_count = count_frag_events(key, chem_to_frag_events, min_ms1_intensity)
+            good_count, bad_count = count_frag_events(chem, chem_to_frag_events, min_ms1_intensity)
         except KeyError:
             good_count = 0
             bad_count = 0
@@ -341,14 +387,14 @@ def update_matched_status(dataset, matches_fullscan, matches_fragfile):
     found_in_fullscan = 0
     found_in_fragfile = 0
     for chem in dataset:
-        if matches_fullscan is not None: # check if a match is found in fullscan mzML
+        if matches_fullscan is not None:  # check if a match is found in fullscan mzML
             if chem in matches_fullscan:
                 chem.found_in_fullscan = True
                 found_in_fullscan += 1
             else:
                 chem.found_in_fullscan = False
 
-        if matches_fragfile is not None: # check if a match is found in fragmentation mzML
+        if matches_fragfile is not None:  # check if a match is found in fragmentation mzML
             if chem in matches_fragfile:
                 chem.found_in_fragfile = True
                 found_in_fragfile += 1
@@ -358,9 +404,100 @@ def update_matched_status(dataset, matches_fullscan, matches_fragfile):
     print('Matched %d/%d in fullscan data, %d/%d in fragmentation data' % (found_in_fullscan, len(dataset),
                                                                            found_in_fragfile, len(dataset)))
 
+
 def compute_pref_rec_f1(tp, fp, fn):
     prec = tp / (tp + fp)
     rec = tp / (tp + fn)
     f1 = (2 * prec * rec) / (prec + rec)
     return prec, rec, f1
 
+
+def calculate_performance(params):
+    # get parameters
+    fragfile = params['fragfile']
+    N = params['N']
+    rt_tol = params['rt_tol']
+    roi_mz_tol = params['roi_mz_tol']
+    roi_min_ms1_intensity = params['roi_min_ms1_intensity']
+    fragmentation_min_ms1_intensity = params['fragmentation_min_ms1_intensity']
+    min_rt = params['min_rt']
+    max_rt = params['max_rt']
+    roi_min_length = params['roi_min_length']
+    fullscan_filename = params['fullscan_filename']
+    P_peaks_df = params['P_peaks_df']
+    Q_peaks_df = params['Q_peaks_df']
+    matching_mz_tol = params['matching_mz_tol']
+    matching_rt_tol = params['matching_rt_tol']
+    scenario = params['scenario']
+
+    controller_file = params['controller_file']
+    chemicals_file = params['chemicals_file']
+
+    if chemicals_file.endswith('.p'):
+        print('Loading chemicals')
+        chemicals = load_obj(chemicals_file)
+    else:
+        print('Extracting chemicals')
+        chemicals = get_chemicals(chemicals_file, roi_mz_tol, roi_min_ms1_intensity, min_rt, max_rt,
+                                  min_length=roi_min_length)
+
+    if controller_file.endswith('.p'):
+        print('Loading fragmentation events')
+        controller = load_obj(controller_file)
+        chem_to_frag_events = None
+    else:
+        print('Extracting fragmentation events')
+        controller = None
+        precursor_df = get_precursor_info(controller_file)
+        chem_to_frag_events = get_chem_to_frag_events(chemicals, precursor_df)
+
+    # compute performance under each scenario
+    print('Computing performance under scenario %d' % scenario)
+    tp, fp, fn, prec, rec, f1 = 0, 0, 0, 0, 0, 0
+    if scenario == 1:
+        tp, fp, fn, prec, rec, f1 = compute_performance_scenario_1(controller, chemicals,
+                                                                   fragmentation_min_ms1_intensity,
+                                                                   fullscan_filename, P_peaks_df,
+                                                                   matching_mz_tol, matching_rt_tol,
+                                                                   chem_to_frag_events=chem_to_frag_events)
+    elif scenario == 2:
+        fragfile_filename = os.path.basename(fragfile)
+        tp, fp, fn, prec, rec, f1 = compute_performance_scenario_2(controller, chemicals,
+                                                                   fragmentation_min_ms1_intensity,
+                                                                   fullscan_filename, fragfile_filename,
+                                                                   P_peaks_df, Q_peaks_df, matching_mz_tol,
+                                                                   matching_rt_tol,
+                                                                   chem_to_frag_events=chem_to_frag_events)
+
+    return N, rt_tol, scenario, tp, fp, fn, prec, rec, f1
+
+
+def evaluate_serial(all_params):
+    results = []
+    for params in all_params:
+        res = calculate_performance(params)
+        results.append(res)
+        print('N=%d rt_tol=%d scenario=%d tp=%d fp=%d fn=%d prec=%.3f rec=%.3f f1=%.3f\n' % res)
+    result_df = pd.DataFrame(results, columns=['N', 'rt_tol', 'scenario', 'TP', 'FP', 'FN', 'Prec', 'Rec', 'F1'])
+    return result_df
+
+
+def evaluate_parallel(all_params):
+    import ipyparallel as ipp
+    rc = ipp.Client()
+    dview = rc[:]  # use all engines​
+    with dview.sync_imports():
+        import os
+
+    dview.push({
+        'get_chemicals': get_chemicals,
+        'get_precursor_info': get_precursor_info,
+        'get_chem_to_frag_events': get_chem_to_frag_events,
+        'compute_performance_scenario_1': compute_performance_scenario_1,
+        'compute_performance_scenario_2': compute_performance_scenario_2,
+        'load_obj': load_obj
+    })
+
+    results = dview.map_sync(calculate_performance, all_params)
+    result_df = pd.DataFrame(results, columns=['N', 'rt_tol', 'scenario', 'TP', 'FP', 'FN', 'Prec', 'Rec', 'F1'])
+    return result_df

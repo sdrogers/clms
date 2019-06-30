@@ -226,9 +226,9 @@ def get_precursor_info(fragfile):
                'ms1_scan_id', 'ms1_scan_rt', 'ms1_mz', 'ms1_intensity']
     df = pd.DataFrame(data, columns=columns)
 
-    # select only rows where we are sure of the matching
+    # select only rows where we are sure of the matching, i.e. the intensity values aren't too different
     df['intensity_diff'] = np.abs(df['ms2_precursor_intensity'] - df['ms1_intensity'])
-    idx = (df['intensity_diff'] == 0)
+    idx = (df['intensity_diff'] < 0.1)
     ms1_df = df[idx]
     return ms1_df
 
@@ -251,7 +251,6 @@ def get_chem_to_frag_events(chemicals, ms1_df):
 
     # loop over each fragmentation event in ms1_df, attempt to match it to chemicals
     chem_to_frag_events = defaultdict(list)
-    chem_dict = {}
     for idx, row in ms1_df.iterrows():
         query_rt = row['ms1_scan_rt']
         query_mz = row['ms1_mz']
@@ -273,11 +272,10 @@ def get_chem_to_frag_events(chemicals, ms1_df):
         if chem is not None:
             ms_level = 2
             peaks = [] # we don't know which ms2 peaks are linked to this chem object
-            key = get_key(chem)
-            chem_dict[key] = chem
+            # key = get_key(chem)
             frag_event = FragmentationEvent(chem, query_rt, ms_level, peaks, scan_id)
-            chem_to_frag_events[key].append(frag_event)
-    return chem_to_frag_events
+            chem_to_frag_events[chem].append(frag_event)
+    return dict(chem_to_frag_events)
 
 
 def get_N_rt_tol_from_qcb_filename(fragfile):
