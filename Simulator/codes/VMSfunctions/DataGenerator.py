@@ -10,7 +10,6 @@ import pymzml
 from sklearn.neighbors import KernelDensity
 
 from VMSfunctions.Common import LoggerMixin, MZ, INTENSITY, RT, N_PEAKS, SCAN_DURATION, MZ_INTENSITY_RT
-from VMSfunctions.PlotsForPaper import filter_df
 
 
 class Peak(object):
@@ -36,6 +35,22 @@ class Peak(object):
                math.isclose(self.rt, other.rt) and \
                math.isclose(self.intensity, other.intensity) and \
                self.ms_level == other.ms_level
+
+
+def filter_df(df, min_ms1_intensity, rt_range, mz_range):
+    # filter by rt range
+    if rt_range is not None:
+        df = df[(df['rt'] > rt_range[0][0]) & (df['rt'] < rt_range[0][1])]
+
+    # filter by mz range
+    if mz_range is not None:
+        df = df[(df['rt'] > mz_range[0][0]) & (df['rt'] < mz_range[0][1])]
+
+    # filter by min intensity
+    intensity_col = 'maxo'
+    if min_ms1_intensity is not None:
+        df = df[(df[intensity_col] > min_ms1_intensity)]
+    return df
 
 
 class DataSource(LoggerMixin):
