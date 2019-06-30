@@ -1,4 +1,5 @@
 from VMSfunctions.Controller import *
+from VMSfunctions.MassSpec import IndependentMassSpectrometer
 from VMSfunctions.Roi import *
 from VMSfunctions.Common import *
 from VMSfunctions.Chemicals import get_absolute_intensity, get_key

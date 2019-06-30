@@ -1,5 +1,6 @@
 import copy
 import glob
+import os
 
 import math
 import numpy as np
@@ -8,7 +9,7 @@ import pylab as plt
 import pymzml
 from sklearn.neighbors import KernelDensity
 
-from VMSfunctions.Common import *
+from VMSfunctions.Common import LoggerMixin, MZ, INTENSITY, RT, N_PEAKS, SCAN_DURATION, MZ_INTENSITY_RT
 from VMSfunctions.PlotsForPaper import filter_df
 
 

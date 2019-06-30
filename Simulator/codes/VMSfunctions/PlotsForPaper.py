@@ -8,6 +8,7 @@ import seaborn as sns
 
 from VMSfunctions.Chemicals import UnknownChemical, get_absolute_intensity, get_key
 from VMSfunctions.Common import load_obj, PROTON_MASS
+from VMSfunctions.TopNExperiment import get_chemicals, get_precursor_info, get_chem_to_frag_events
 
 
 def get_N(row):

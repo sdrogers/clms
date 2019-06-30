@@ -2,6 +2,7 @@
 # TODO: this code is written for Python 2, need to check that it's actually Python 3 compatible
 
 import bisect
+from collections import OrderedDict
 
 import math
 import numpy as np
@@ -11,11 +12,9 @@ from scipy.stats import pearsonr
 
 from VMSfunctions.Chemicals import ChemicalCreator, UnknownChemical
 from VMSfunctions.Chromatograms import EmpiricalChromatogram
-from VMSfunctions.Common import *
+from VMSfunctions.Common import PROTON_MASS, CHEM_NOISE
 
-PROTON_MASS = 1.00727645199076
-
-POS_TRANSFORMATIONS = collections.OrderedDict()
+POS_TRANSFORMATIONS = OrderedDict()
 POS_TRANSFORMATIONS['M+H'] = lambda mz: (mz + PROTON_MASS)
 POS_TRANSFORMATIONS['[M+ACN]+H'] = lambda mz: (mz + 42.033823)
 POS_TRANSFORMATIONS['[M+CH3OH]+H'] = lambda mz: (mz + 33.033489)

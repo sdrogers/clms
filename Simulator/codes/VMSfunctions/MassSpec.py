@@ -1,14 +1,11 @@
 from collections import defaultdict
 from collections import namedtuple
 
+import numpy as np
+import pandas as pd
 from events import Events
 
-from VMSfunctions.Chromatograms import *
-from VMSfunctions.Common import *
-# controller sends scan request
-# mass spec generates scans (is an iterator over scans)
-# scan contains: mz list, intensity list, rt, ms_level, precursor_mass, window
-# simplest controller: just generates ms1 data
+from VMSfunctions.Common import LoggerMixin, adduct_transformation
 from VMSfunctions.DataGenerator import Peak
 
 

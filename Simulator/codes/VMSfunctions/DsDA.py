@@ -1,10 +1,10 @@
 import glob
-import pandas as pd
 import os
-import numpy as np
-import tqdm
 
-from VMSfunctions.Common import *
+import numpy as np
+import pandas as pd
+
+from VMSfunctions.Common import load_obj
 
 
 def get_schedule(n, schedule_dir):

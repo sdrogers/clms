@@ -1,12 +1,13 @@
 import copy
+import glob
 import re
-import math
 
+import math
+import numpy as np
 import scipy
 import scipy.stats
-import glob
 
-from VMSfunctions.ChineseRestaurantProcess import *
+from VMSfunctions.ChineseRestaurantProcess import Restricted_Crp
 from VMSfunctions.Common import LoggerMixin, CHEM_DATA, POS_TRANSFORMATIONS, load_obj, takeClosest, save_obj
 
 
@@ -159,6 +160,14 @@ class UnknownChemical(Chemical):
         return 'UnknownChemical mz=%.4f rt=%.2f max_intensity=%.2f' % (
             self.isotopes[0][0], self.rt, self.max_intensity)
 
+    def __eq__(self, other):
+        if not isinstance(other, UnknownChemical):
+            return False
+        return get_key(self) == get_key(other)
+
+    def __hash__(self):
+        return hash(get_key(self))
+
 
 class KnownChemical(Chemical):
     """
@@ -178,7 +187,7 @@ class KnownChemical(Chemical):
 
     def __repr__(self):
         return 'KnownChemical - %r rt=%.2f max_intensity=%.2f' % (
-        self.formula.formula_string, self.rt, self.max_intensity)
+            self.formula.formula_string, self.rt, self.max_intensity)
 
 
 class MSN(Chemical):
@@ -247,7 +256,7 @@ class ChemicalCreator(LoggerMixin):
         ROIs = self._load_ROI_file(current_ROI)
         ROI_intensities = np.array([r.max_intensity for r in ROIs])
         for i in range(n_ms1):
-            if i == sum(split[0:(current_ROI+1)]):
+            if i == sum(split[0:(current_ROI + 1)]):
                 current_ROI += 1
                 ROIs = self._load_ROI_file(current_ROI)
                 ROI_intensities = np.array([r.max_intensity for r in ROIs])
@@ -258,7 +267,8 @@ class ChemicalCreator(LoggerMixin):
             ROI = ROIs[self._get_ROI_idx(ROI_intensities, sampled_peaks[i].intensity)]
             chem = self._get_chemical(1, formula, ROI, sampled_peaks[i])
             if self.fixed_mz == True:
-                chem.mzs = [0 for i in range(len(chem.chromatogram.raw_mzs))]  # not sure how this will work. Not sure why this is set to 0?
+                chem.mzs = [0 for i in range(
+                    len(chem.chromatogram.raw_mzs))]  # not sure how this will work. Not sure why this is set to 0?
             if ms_levels > 1:
                 chem.children = self._get_children(1, chem)
             chem.type = CHEM_DATA
@@ -413,7 +423,8 @@ class MultiSampleCreator(LoggerMixin):
 
     def __init__(self, original_dataset, n_samples, classes, intensity_noise_sd,
                  change_probabilities, change_differences_means, change_differences_sds, dropout_probabilities=None,
-                 experimental_classes=None, experimental_probabilitities=None, experimental_sds=None, save_location=None):
+                 experimental_classes=None, experimental_probabilitities=None, experimental_sds=None,
+                 save_location=None):
         self.original_dataset = original_dataset
         self.n_samples = n_samples
         self.classes = classes
@@ -526,9 +537,7 @@ def get_absolute_intensity(chem, query_rt):
 def get_key(chem):
     '''
     Turns a chemical object into (mz, rt, intensity) tuples for equal comparison
-    TODO: maybe we should override __eq__ of Chemical instead?
     :param chem: A chemical object
     :return: a tuple of the three values
     '''
     return (tuple(chem.isotopes), chem.rt, chem.max_intensity)
-

@@ -1,7 +1,8 @@
-import numpy as np
-import pylab as plt
 import bisect
 import copy
+
+import numpy as np
+import pylab as plt
 
 
 class BlockData(object):
