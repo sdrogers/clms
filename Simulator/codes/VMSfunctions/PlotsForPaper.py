@@ -441,6 +441,9 @@ def calculate_performance(params):
         chemicals = get_chemicals(chemicals_file, roi_mz_tol, roi_min_ms1_intensity, min_rt, max_rt,
                                   min_length=roi_min_length)
 
+    if type(chemicals) == list:
+        chemicals = np.array(chemicals)
+
     if controller_file.endswith('.p'):
         print('Loading fragmentation events')
         controller = load_obj(controller_file)
@@ -482,21 +485,17 @@ def evaluate_serial(all_params):
     return result_df
 
 
-def evaluate_parallel(all_params):
+def evaluate_parallel(all_params, pushed_dict=None):
     import ipyparallel as ipp
     rc = ipp.Client()
     dview = rc[:]  # use all engines​
     with dview.sync_imports():
         import os
+        from VMSfunctions.TopNExperiment import get_chemicals, get_precursor_info, get_chem_to_frag_events
+        from VMSfunctions.Common import load_obj
 
-    dview.push({
-        'get_chemicals': get_chemicals,
-        'get_precursor_info': get_precursor_info,
-        'get_chem_to_frag_events': get_chem_to_frag_events,
-        'compute_performance_scenario_1': compute_performance_scenario_1,
-        'compute_performance_scenario_2': compute_performance_scenario_2,
-        'load_obj': load_obj
-    })
+    if pushed_dict is not None:
+        dview.push(pushed_dict)
 
     results = dview.map_sync(calculate_performance, all_params)
     result_df = pd.DataFrame(results, columns=['N', 'rt_tol', 'scenario', 'TP', 'FP', 'FN', 'Prec', 'Rec', 'F1'])
