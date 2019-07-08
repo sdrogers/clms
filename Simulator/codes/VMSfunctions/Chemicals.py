@@ -6,6 +6,7 @@ import math
 import numpy as np
 import scipy
 import scipy.stats
+import random
 
 from VMSfunctions.ChineseRestaurantProcess import Restricted_Crp
 from VMSfunctions.Common import LoggerMixin, CHEM_DATA, POS_TRANSFORMATIONS, load_obj, takeClosest, save_obj
@@ -423,8 +424,8 @@ class MultiSampleCreator(LoggerMixin):
 
     def __init__(self, original_dataset, n_samples, classes, intensity_noise_sd,
                  change_probabilities, change_differences_means, change_differences_sds, dropout_probabilities=None,
-                 experimental_classes=None, experimental_probabilitities=None, experimental_sds=None,
-                 save_location=None):
+                 dropout_numbers=None, experimental_classes=None, experimental_probabilitities=None,
+                 experimental_sds=None, save_location=None):
         self.original_dataset = original_dataset
         self.n_samples = n_samples
         self.classes = classes
@@ -433,6 +434,7 @@ class MultiSampleCreator(LoggerMixin):
         self.change_differences_means = change_differences_means
         self.change_differences_sds = change_differences_sds
         self.dropout_probabilities = dropout_probabilities
+        self.dropout_numbers = dropout_numbers
         self.experimental_classes = experimental_classes
         self.experimental_probabilitities = experimental_probabilitities
         self.experimental_sds = experimental_sds
@@ -471,12 +473,24 @@ class MultiSampleCreator(LoggerMixin):
         chemical_statuses.extend([np.random.choice(["changed", "unchanged"], len(self.original_dataset),
                                                    p=[self.change_probabilities[i], 1 - self.change_probabilities[i]])
                                   for i in range(len(self.classes) - 1)])
-        if self.dropout_probabilities is not None:
-            for index_chemical in range(len(chemical_statuses)):
-                missing = np.where(np.random.binomial(1, self.dropout_probabilities[index_chemical],
-                                                      len(chemical_statuses[index_chemical])))
-                chemical_statuses[index_chemical][missing] = "missing"
+        self.missing = self._get_missing_chemicals(chemical_statuses)
+        for index_chemical in range(len(chemical_statuses)):
+            chemical_statuses[index_chemical][self.missing[index_chemical]] = "missing"
         return chemical_statuses
+
+    def _get_missing_chemicals(self, chemical_statuses):
+        missing = []
+        while len(missing) != len(chemical_statuses):
+            if self.dropout_probabilities is not None:
+                if self.dropout_numbers is not None:
+                    print("using dropout_probabilties rather than dropout_number.")
+                new_missing = list(np.where(np.random.binomial(1, self.dropout_probabilities[len(missing)],
+                                             len(self.original_dataset)))[0])
+            if self.dropout_probabilities is None and self.dropout_numbers is not None:
+                new_missing = random.sample(range(0, len(self.original_dataset)),self.dropout_numbers)
+            missing.append(new_missing)
+            missing = [list(x) for x in set(tuple(sorted(x)) for x in missing)]
+        return missing
 
     def _get_experimental_statuses(self):
         experimental_statuses = []
