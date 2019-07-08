@@ -8,6 +8,7 @@ import pymzml
 from VMSfunctions.Chemicals import get_absolute_intensity
 from VMSfunctions.Common import save_obj, create_if_not_exist, get_rt, find_nearest_index_in_array
 from VMSfunctions.Controller import TopNController
+from VMSfunctions.DataGenerator import DataSource, PeakDensityEstimator
 from VMSfunctions.MassSpec import IndependentMassSpectrometer, FragmentationEvent
 from VMSfunctions.Roi import make_roi, RoiToChemicalCreator
 
@@ -46,6 +47,16 @@ def get_chemicals(mzML_file, mz_tol, min_ms1_intensity, start_rt, stop_rt, min_l
 # Codes to set up experiments
 ########################################################################################################################
 
+def fit_densities(mzml_path, fragfile, min_rt, max_rt):
+    ds = DataSource()
+    ds.load_data(mzml_path, file_name=fragfile)
+    kde_min_ms1_intensity = 0  # min intensity to be selected for kdes
+    kde_min_ms2_intensity = 0
+    densities = PeakDensityEstimator(kde_min_ms1_intensity, kde_min_ms2_intensity, min_rt, max_rt, plot=False)
+    densities.kde(ds, fragfile, 2, bandwidth_mz_intensity_rt=1.0, bandwidth_n_peaks=1.0)
+    return densities
+
+
 def run_experiment(param):
     '''
     Runs a Top-N experiment
@@ -55,11 +66,23 @@ def run_experiment(param):
     analysis_name = param['analysis_name']
     mzml_out = param['mzml_out']
     pickle_out = param['pickle_out']
+    N = param['N']
+    rt_tol = param['rt_tol']
+
     if os.path.isfile(mzml_out) and os.path.isfile(pickle_out):
         print('Skipping %s' % (analysis_name))
     else:
         print('Processing %s' % (analysis_name))
-        mass_spec = IndependentMassSpectrometer(param['ionisation_mode'], param['data'], density=param['density'])
+        density = param['density']
+        if density is None: # extract density from the fragmenatation file
+            mzml_path = param['mzml_path']
+            fragfiles = param['fragfiles']
+            fragfile = fragfiles[(N, rt_tol, )]
+            min_rt = param['min_rt']
+            max_rt = param['max_rt']
+            density = fit_densities(mzml_path, fragfile, min_rt, max_rt)
+
+        mass_spec = IndependentMassSpectrometer(param['ionisation_mode'], param['data'], density)
         controller = TopNController(mass_spec, param['N'], param['isolation_window'],
                                     param['mz_tol'], param['rt_tol'], param['min_ms1_intensity'])
         controller.run(param['min_rt'], param['max_rt'], progress_bar=param['pbar'])
@@ -99,7 +122,7 @@ def run_serial_experiment(param, i, total):
 
 def get_params(experiment_name, Ns, rt_tols, mz_tol, isolation_window, ionisation_mode, data, density,
                min_ms1_intensity, min_rt, max_rt,
-               out_dir, pbar):
+               out_dir, pbar, mzml_path=None, fragfiles=None):
     '''
     Creates a list of experimental parameters
     :param experiment_name: current experimental name
@@ -126,7 +149,7 @@ def get_params(experiment_name, Ns, rt_tols, mz_tol, isolation_window, ionisatio
             analysis_name = 'experiment_%s_N_%d_rttol_%d' % (experiment_name, N, rt_tol)
             mzml_out = os.path.join(out_dir, '%s.mzML' % analysis_name)
             pickle_out = os.path.join(out_dir, '%s.p' % analysis_name)
-            params.append({
+            param_dict = {
                 'N': N,
                 'mz_tol': mz_tol,
                 'rt_tol': rt_tol,
@@ -141,7 +164,12 @@ def get_params(experiment_name, Ns, rt_tols, mz_tol, isolation_window, ionisatio
                 'mzml_out': mzml_out,
                 'pickle_out': pickle_out,
                 'pbar': pbar
-            })
+            }
+            if mzml_path is not None:
+                param_dict['mzml_path'] = mzml_path
+            if fragfiles is not None:
+                param_dict['fragfiles'] = fragfiles
+            params.append(param_dict)
     print('len(params) =', len(params))
     return params
 
